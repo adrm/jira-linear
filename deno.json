@@ -1,0 +1,10 @@
+{
+  "tasks": {
+    "test": "deno test --allow-net --allow-read --allow-write --allow-env --allow-run server/",
+    "start": "deno run --allow-net --allow-read --allow-write --allow-env server/main.ts",
+    "service:install": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run server/service.ts install",
+    "service:uninstall": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run server/service.ts uninstall",
+    "service:status": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run server/service.ts status"
+  },
+  "compilerOptions": { "strict": true }
+}

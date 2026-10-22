@@ -1,0 +1,7 @@
+data/
+node_modules/
+dist/
+web/dist/
+.env
+.DS_Store
+jira-linear.config.json

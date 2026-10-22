@@ -1,0 +1,22 @@
+{
+  "projectName": "My team",
+  "fields": {
+    "storyPoints": "Story Points",
+    "quarter": "Quarter",
+    "initialEstimate": "Initial Estimate",
+    "revisedEstimate": "Revised Estimate"
+  },
+  "vocab": {
+    "priorities": { "Blocker": 4, "Major": 3, "Normal": 2, "Minor": 1, "Trivial": 0 },
+    "bugTypes": ["Bug", "Defect"],
+    "spikeTypes": ["Spike", "Research"],
+    "subtaskTypes": ["Sub-task"],
+    "nonTicketTypes": ["Epic", "Sub-task"]
+  },
+  "workflow": {
+    "order": ["To Do", "In Progress", "In Review", "Done"],
+    "backlog": ["Backlog"],
+    "canceled": ["Canceled", "Won't Do"],
+    "colors": { "In Review": [135, 62] }
+  }
+}

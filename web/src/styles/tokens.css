@@ -1,0 +1,106 @@
+/*
+ * Design tokens. Colours are generated in LCH from a handful of inputs so equal lightness
+ * steps look equally light, and so contrast can be raised with one variable.
+ *   --base-h / --base-c   chrome tint (almost neutral, a breath of blue)
+ *   --accent-h / --accent-c
+ *   --contrast            0..100, raised to 100 by [data-contrast="high"]
+ */
+:root {
+  --base-h: 266;
+  --base-c: 3;
+  --accent-h: 276;
+  --accent-c: 64;
+  --contrast: 40;
+
+  --font: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --row-h: 36px;
+  --head-h: 34px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* dark is the default */
+  color-scheme: dark;
+  --l-bg: 8;
+  --l-panel: 11;
+  --l-raise: 14.5;
+  --l-hover: 17.5;
+  --l-line: calc(19 + var(--contrast) * 0.07);
+  --l-line-strong: calc(27 + var(--contrast) * 0.1);
+  --l-text: calc(91 + var(--contrast) * 0.07);
+  --l-text-2: calc(74 + var(--contrast) * 0.12);
+  --l-muted: calc(56 + var(--contrast) * 0.14);
+  --l-accent: 62;
+  --shadow: 0 1px 0 lch(100 0 0 / 0.04) inset, 0 16px 48px lch(0 0 0 / 0.55), 0 0 0 1px lch(0 0 0 / 0.5);
+  --l-started: 78; --l-done: 66; --l-todo: 58;
+  --l-status: 74;
+}
+
+:root[data-theme="light"],
+:root[data-theme="system"]:not(.force-dark) {
+  /* overridden below by the media query for system; light needs the explicit rule */
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --l-bg: 99;
+  --l-panel: 96.5;
+  --l-raise: 100;
+  --l-hover: 94;
+  --l-line: calc(92 - var(--contrast) * 0.08);
+  --l-line-strong: calc(85 - var(--contrast) * 0.14);
+  --l-text: calc(13 - var(--contrast) * 0.07);
+  --l-text-2: calc(33 - var(--contrast) * 0.1);
+  --l-muted: calc(50 - var(--contrast) * 0.12);
+  --l-accent: 48;
+  --shadow: 0 0 0 1px lch(0 0 0 / 0.07), 0 12px 40px lch(0 0 0 / 0.16);
+  --l-started: 64; --l-done: 52; --l-todo: 55;
+  --l-status: 58;
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --l-bg: 99;
+    --l-panel: 96.5;
+    --l-raise: 100;
+    --l-hover: 94;
+    --l-line: calc(92 - var(--contrast) * 0.08);
+    --l-line-strong: calc(85 - var(--contrast) * 0.14);
+    --l-text: calc(13 - var(--contrast) * 0.07);
+    --l-text-2: calc(33 - var(--contrast) * 0.1);
+    --l-muted: calc(50 - var(--contrast) * 0.12);
+    --l-accent: 48;
+    --shadow: 0 0 0 1px lch(0 0 0 / 0.07), 0 12px 40px lch(0 0 0 / 0.16);
+    --l-started: 64; --l-done: 52; --l-todo: 55;
+    --l-status: 58;
+  }
+}
+:root[data-contrast="high"] { --contrast: 100; }
+:root[data-density="compact"] { --row-h: 28px; --head-h: 28px; }
+
+:root {
+  --bg: lch(var(--l-bg) var(--base-c) var(--base-h));
+  --panel: lch(var(--l-panel) var(--base-c) var(--base-h));
+  --raise: lch(var(--l-raise) var(--base-c) var(--base-h));
+  --hover: lch(var(--l-hover) var(--base-c) var(--base-h));
+  --line: lch(var(--l-line) var(--base-c) var(--base-h));
+  --line-strong: lch(var(--l-line-strong) var(--base-c) var(--base-h));
+  --text: lch(var(--l-text) 2 var(--base-h));
+  --text-2: lch(var(--l-text-2) 3 var(--base-h));
+  --muted: lch(var(--l-muted) 4 var(--base-h));
+  --accent: lch(var(--l-accent) var(--accent-c) var(--accent-h));
+  --accent-soft: lch(var(--l-accent) var(--accent-c) var(--accent-h) / 0.16);
+  --accent-line: lch(var(--l-accent) var(--accent-c) var(--accent-h) / 0.55);
+
+  --st-todo: lch(var(--l-todo) 5 var(--base-h));
+  --st-active: lch(var(--l-started) 78 86);
+  --st-done: lch(var(--l-done) 52 150);
+  --blocked: lch(58 80 32);
+  --blocking: lch(68 74 62);
+  --danger: lch(60 78 32);
+  --warn: lch(76 74 80);
+  --urgent: lch(64 82 50);
+  --health-good: lch(68 55 150);
+  --health-risk: lch(76 78 85);
+  --health-off: lch(58 80 32);
+}
