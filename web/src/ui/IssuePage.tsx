@@ -9,6 +9,7 @@ import { dueState } from "../lib/rowdetails";
 import { timeAgo } from "../lib/time";
 import { blockState } from "../lib/relations";
 import { subtaskType, typeClass } from "../lib/vocab";
+import { ShowSidebar } from "./Chrome";
 import { Avatar, PriorityIcon, StatusIcon } from "./icons";
 import { JiraKey } from "./JiraKey";
 import { PropRow } from "./PropRow";
@@ -63,6 +64,7 @@ export function IssuePage() {
   return (
     <div className="issue-page">
       <header className="viewhead issue-head">
+        <ShowSidebar />
         <button type="button" className="icon-btn" aria-label="Back" title="Back  Esc" onClick={back}><ArrowLeft size={16} /></button>
         <nav aria-label="Breadcrumb" className="crumb-trail">
           <button type="button" onClick={back}>{site.name}</button>

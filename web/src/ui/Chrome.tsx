@@ -105,21 +105,26 @@ export function Sidebar() {
   );
 }
 
+/** Brings the sidebar back when it is hidden; renders nothing otherwise. */
+export function ShowSidebar() {
+  const { settings } = useCtx();
+  const collapsed = useSettings((s) => s.sidebarCollapsed);
+  if (!collapsed) return null;
+  return <button type="button" className="icon-btn" aria-label="Show sidebar" title="Show sidebar  ⌘." onClick={() => settings.getState().toggleSidebar()}><PanelLeft size={16} /></button>;
+}
+
 const TITLES: Record<string, string> = { mine: "My issues", created: "My issues", active: "Active", backlog: "Backlog", review: "For review", all: "All issues", projects: "Projects" };
 
 export function ViewHeader({ count }: { count?: number }) {
-  const { ui, settings } = useCtx();
+  const { ui } = useCtx();
   const view = useUi((s) => s.view);
   const search = useUi((s) => s.search);
-  const collapsed = useSettings((s) => s.sidebarCollapsed);
   const filterCount = useFilters().length;
   const projectTab = useUi((s) => s.projectTab);
   const overviewTab = view.startsWith("project:") && projectTab === "overview";
   return (
     <header className="viewhead">
-      {collapsed && (
-        <button type="button" className="icon-btn" aria-label="Show sidebar" title="Show sidebar  ⌘." onClick={() => settings.getState().toggleSidebar()}><PanelLeft size={16} /></button>
-      )}
+      <ShowSidebar />
       {TITLES[view] && <h1 className="viewtitle">{TITLES[view]}{count !== undefined && <span className="count">{count}</span>}</h1>}
       {(view === "mine" || view === "created") && (
         <div role="tablist" aria-label="My issues" className="seg tabs-seg">

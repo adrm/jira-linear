@@ -1171,6 +1171,15 @@ describe("appearance", () => {
     expect(settings.getState()).toMatchObject({ theme: "dark", contrast: "high", density: "compact", sidebarCollapsed: true });
   });
 
+  it("a hidden sidebar can be brought back from an open ticket", async () => {
+    const { user, settings } = await renderApp();
+    await user.click(screen.getByRole("button", { name: "Hide sidebar" }));
+    await user.keyboard("j{Enter}");
+    await screen.findByRole("button", { name: "Back" });
+    await user.click(screen.getByRole("button", { name: "Show sidebar" }));
+    expect(settings.getState().sidebarCollapsed).toBe(false);
+  });
+
   it("the command menu can toggle the sidebar too", async () => {
     const { user } = await renderApp();
     await user.keyboard("{Meta>}k{/Meta}");
