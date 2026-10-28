@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Issue } from "@shared/types";
 import { isEpic, stripPermanent } from "../lib/projects";
+import { rankIssues } from "../lib/query";
 import { jiraTypeFor, priorityOptions, statusOptions, typeClass, TYPE_GROUPS, type TypeGroup } from "../lib/vocab";
 import { localContext } from "../store/store";
-import { PickerDialog, PickList, type PickItem } from "./Overlay";
+import { PickerDialog, PickList, type PickGroups, type PickItem } from "./Overlay";
 import { Avatar, PriorityIcon, StatusIcon } from "./icons";
 import { useCtx, useIssueMap, useStatusFractions, useTargetIssues } from "./context";
 
@@ -153,22 +154,19 @@ export function DueDatePicker() {
 
 const RELATION_TITLE = { blockedBy: "Blocked by", blocks: "Blocking", relates: "Related to" } as const;
 
-/** Pick another ticket to relate the given one to. Searches by key or title, newest first. */
+/** Pick another ticket to relate the given one to. Searches by key or title: exact key, open tickets and newest keys first. */
 export function RelationPicker({ relation, issueKey }: { relation: "blockedBy" | "blocks" | "relates"; issueKey: string }) {
   const { app, ui } = useCtx();
   const issues = useIssueMap();
   const fractions = useStatusFractions();
   const candidates = useMemo(
-    () => Object.values(issues).filter((i) => !isEpic(i) && i.key !== issueKey && !i.key.startsWith("NEW-")).sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0)),
+    () => Object.values(issues).filter((i) => !isEpic(i) && i.key !== issueKey && !i.key.startsWith("NEW-")),
     [issues, issueKey],
   );
-  const source = (q: string): PickItem[] => {
-    const t = q.trim().toLowerCase();
-    return candidates
-      .filter((i) => !t || `${i.key} ${i.summary}`.toLowerCase().includes(t))
+  const source = (q: string): PickGroups => [{ items:
+    rankIssues(candidates, q)
       .slice(0, 50)
-      .map((i) => ({ id: i.key, label: i.summary, hint: i.key, search: `${i.key} ${i.summary}`, icon: <StatusIcon category={i.statusCategory} status={i.status} fraction={fractions.tickets[i.status]} /> }));
-  };
+      .map((i) => ({ id: i.key, label: i.summary, hint: i.key, search: `${i.key} ${i.summary}`, icon: <StatusIcon category={i.statusCategory} status={i.status} fraction={fractions.tickets[i.status]} /> })) }];
   const pick = (other: string) => {
     ui.getState().closeOverlay();
     const body = relation === "blockedBy"

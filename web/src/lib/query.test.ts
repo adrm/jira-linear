@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterIssues, groupByStatus, searchIssues, flatOrder } from "./query";
+import { filterIssues, groupByStatus, rankIssues, searchIssues, flatOrder } from "./query";
 import { mkIssue } from "../test/fakeServer";
 
 const issues = [
@@ -24,6 +24,25 @@ describe("searchIssues", () => {
   });
   it("ranks exact key matches first", () => {
     expect(searchIssues(issues, "12")[0].key).toBe("ABC-12");
+  });
+});
+
+describe("rankIssues", () => {
+  const pool = [
+    mkIssue("ABC-5", { summary: "Export chart data", statusCategory: "done", updated: "2026-10-20T10:00:00.000+0000" }),
+    mkIssue("ABC-90", { summary: "Pre-chart cleanup", statusCategory: "new", updated: "2026-10-01T10:00:00.000+0000" }),
+    mkIssue("ABC-30", { summary: "Fix the chart", statusCategory: "indeterminate", updated: "2026-10-02T10:00:00.000+0000" }),
+    mkIssue("ABC-40", { summary: "Chart colors", statusCategory: "new", updated: "2026-10-03T10:00:00.000+0000" }),
+    mkIssue("ABC-50", { summary: "Mischarted totals", statusCategory: "new", updated: "2026-10-04T10:00:00.000+0000" }),
+  ];
+  it("open before done, then match quality, then higher key", () => {
+    expect(rankIssues(pool, "chart").map((i) => i.key)).toEqual(["ABC-40", "ABC-90", "ABC-30", "ABC-50", "ABC-5"]);
+  });
+  it("breaks key ties by recency and puts an exact key first even when done", () => {
+    expect(rankIssues(pool, "5")[0].key).toBe("ABC-5");
+  });
+  it("empty query ranks everything by open then newest key", () => {
+    expect(rankIssues(pool, "").map((i) => i.key)).toEqual(["ABC-90", "ABC-50", "ABC-40", "ABC-30", "ABC-5"]);
   });
 });
 

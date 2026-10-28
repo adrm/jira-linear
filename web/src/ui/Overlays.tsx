@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { View } from "../store/ui";
 import { SHORTCUTS } from "./shortcuts";
-import { PickerDialog, type PickItem } from "./Overlay";
+import { contains, PickerDialog, type PickGroups, type PickItem } from "./Overlay";
+import type { Issue } from "@shared/types";
+import { rankIssues } from "../lib/query";
 import { StatusIcon } from "./icons";
 import { AssigneePicker, DueDatePicker, LabelsPicker, PriorityPicker, ProjectPicker, RelationPicker, StatusPicker } from "./pickers";
 import { ContextMenu } from "./ContextMenu";
@@ -155,10 +157,19 @@ function Palette() {
     () => Object.values(issues).filter(isEpic).map((e) => ({ id: `project:${e.key}`, label: stripPermanent(e.summary), hint: e.key, icon: <StatusIcon category={e.statusCategory} status={e.status} fraction={fractions.projects[e.status]} />, search: `${e.key} ${stripPermanent(e.summary)}` })),
     [issues, fractions],
   );
-  const issueItems = useMemo<PickItem[]>(
-    () => Object.values(issues).filter((i) => !isEpic(i)).map((i) => ({ id: `issue:${i.key}`, label: i.summary, hint: i.key, icon: <StatusIcon category={i.statusCategory} status={i.status} fraction={fractions.tickets[i.status]} />, search: `${i.key} ${i.summary}` })),
-    [issues, fractions],
-  );
+  const heading = targets.length === 1 ? `Actions for ${targets[0]}` : `Actions for ${targets.length} issues`;
+  const ticketList = useMemo(() => Object.values(issues).filter((i) => !isEpic(i)), [issues]);
+  const toItem = (i: Issue): PickItem => ({ id: `issue:${i.key}`, label: i.summary, hint: i.key, icon: <StatusIcon category={i.statusCategory} status={i.status} fraction={fractions.tickets[i.status]} />, search: `${i.key} ${i.summary}` });
+  /** Commands and projects filtered as typed; issues ranked (exact key, open, best match, newest) and capped. */
+  const source = (q: string): PickGroups => {
+    const keep = (items: PickItem[]) => (q.trim() ? items.filter((it) => contains(it.search ?? it.label, q)) : items);
+    return [
+      ...(targets.length ? [{ heading, items: keep(actionItems) }] : []),
+      { heading: "Commands", items: keep(commands) },
+      { heading: "Projects", items: keep(projectItems) },
+      { heading: "Issues", items: rankIssues(ticketList, q).slice(0, 50).map(toItem) },
+    ];
+  };
   const pick = (id: string) => {
     const s = ui.getState();
     if (id.startsWith("act:")) runAction(ctx, id.slice(4) as ActionId);
@@ -197,16 +208,10 @@ function Palette() {
       s.openIssue(id.slice(6));
     }
   };
-  const heading = targets.length === 1 ? `Actions for ${targets[0]}` : `Actions for ${targets.length} issues`;
   return (
     <PickerDialog
       title="Command palette" placeholder="Search issues or run a command…"
-      groups={[
-        ...(targets.length ? [{ heading, items: actionItems }] : []),
-        { heading: "Commands", items: commands },
-        { heading: "Projects", items: projectItems },
-        { heading: "Issues", items: issueItems },
-      ]}
+      groups={[]} source={source}
       onClose={() => ui.getState().closeOverlay()} onPick={pick}
     />
   );

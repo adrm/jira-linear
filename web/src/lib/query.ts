@@ -23,18 +23,43 @@ function progress(status: string): number {
   return i === -1 ? Number.MAX_SAFE_INTEGER : i;
 }
 
-export function searchIssues(issues: Issue[], query: string): Issue[] {
+const keyNumber = (i: Issue) => Number(i.key.split("-")[1]) || 0;
+
+/** 0 = summary starts with the token, 1 = a word starts with it, 2 = appears inside, 3 = only the key matches. */
+function tokenQuality(summary: string, token: string): number {
+  if (summary.startsWith(token)) return 0;
+  if (new RegExp(`(^|[^\\p{L}\\p{N}])${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "u").test(summary)) return 1;
+  return summary.includes(token) ? 2 : 3;
+}
+
+/**
+ * Issues matching every token of the query (against key and summary), best first: exact key or number,
+ * then open before done, then match quality, then higher issue number, then most recently updated.
+ * An empty query returns every issue ranked by the same rules minus the match ones.
+ */
+export function rankIssues(issues: Issue[], query: string): Issue[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!tokens.length) return issues;
-  const hits = issues.filter((i) => {
-    const hay = `${i.key} ${i.summary}`.toLowerCase();
-    return tokens.every((t) => hay.includes(t));
-  });
-  const exact = (i: Issue) => {
+  const scored = issues.flatMap((i) => {
+    const key = i.key.toLowerCase();
+    const summary = i.summary.toLowerCase();
+    if (!tokens.every((t) => `${key} ${summary}`.includes(t))) return [];
     const num = i.key.split("-")[1];
-    return tokens.some((t) => t === i.key.toLowerCase() || t === num) ? 0 : 1;
-  };
-  return hits.map((i, idx) => ({ i, idx })).sort((a, b) => exact(a.i) - exact(b.i) || a.idx - b.idx).map((x) => x.i);
+    return [{
+      i,
+      exact: tokens.some((t) => t === key || t === num) ? 0 : 1,
+      open: i.statusCategory === "done" ? 1 : 0,
+      quality: tokens.reduce((n, t) => n + tokenQuality(summary, t), 0),
+    }];
+  });
+  return scored
+    .sort((a, b) =>
+      a.exact - b.exact || a.open - b.open || a.quality - b.quality ||
+      keyNumber(b.i) - keyNumber(a.i) || (a.i.updated < b.i.updated ? 1 : a.i.updated > b.i.updated ? -1 : 0))
+    .map((x) => x.i);
+}
+
+export function searchIssues(issues: Issue[], query: string): Issue[] {
+  return query.trim() ? rankIssues(issues, query) : issues;
 }
 
 export function filterIssues(issues: Issue[], f: Filter): Issue[] {
