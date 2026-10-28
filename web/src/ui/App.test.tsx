@@ -1155,6 +1155,22 @@ describe("appearance", () => {
     expect(settings.getState()).toMatchObject({ theme: "light", contrast: "high", density: "compact" });
   });
 
+  it("the settings dialog switches theme, contrast, density and the sidebar", async () => {
+    const { user, settings } = await renderApp();
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const dialog = await screen.findByRole("dialog", { name: "Settings" });
+    const press = (group: string, name: string) => user.click(within(within(dialog).getByRole("group", { name: group })).getByRole("button", { name }));
+    await press("Theme", "Dark");
+    await press("Contrast", "High");
+    await press("Density", "Compact");
+    expect(html().getAttribute("data-theme")).toBe("dark");
+    expect(html().getAttribute("data-contrast")).toBe("high");
+    expect(html().getAttribute("data-density")).toBe("compact");
+    expect(within(within(dialog).getByRole("group", { name: "Theme" })).getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(dialog).getByRole("checkbox", { name: "Show sidebar" }));
+    expect(settings.getState()).toMatchObject({ theme: "dark", contrast: "high", density: "compact", sidebarCollapsed: true });
+  });
+
   it("the command menu can toggle the sidebar too", async () => {
     const { user } = await renderApp();
     await user.keyboard("{Meta>}k{/Meta}");

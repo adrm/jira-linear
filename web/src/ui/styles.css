@@ -472,6 +472,9 @@ button.side-row:hover { background: var(--hover); }
 .disp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-2); }
 .disp-row select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 4px 8px; min-width: 130px; }
 .disp-check { display: flex; align-items: center; gap: 8px; color: var(--text-2); cursor: pointer; }
+.form .disp-check { display: flex; font-size: 13px; }
+.form .disp-check input { padding: 0; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-2); font-size: 13px; }
 .disp-props { display: flex; flex-wrap: wrap; gap: 5px; padding-top: 4px; border-top: 1px solid var(--line); }
 .prop-chip { height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); font-size: 12px; }
 .prop-chip[aria-pressed="true"] { color: var(--text); background: var(--hover); }
