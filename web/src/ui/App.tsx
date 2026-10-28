@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import type { AppStore } from "../store/store";
 import type { UiStore } from "../store/ui";
@@ -13,6 +13,7 @@ import { runAction } from "./actions";
 import { isEpic } from "../lib/projects";
 import { CtxProvider, useCtx, useIssueMap, useOrder, useProjects, useProjectsDisplay, useSettings, useUi, useVisible, type Ctx } from "./context";
 import { site } from "../lib/site";
+import { formatPath, parsePath, type Route } from "../lib/routes";
 
 export interface AppProps {
   app: AppStore;
@@ -104,7 +105,7 @@ export function App(props: AppProps) {
 
 function Shell() {
   useShortcuts();
-  useHistorySync();
+  useRouting();
   const detailOpen = useUi((s) => s.detailOpen);
   const view = useUi((s) => s.view);
   const projectTab = useUi((s) => s.projectTab);
@@ -146,37 +147,63 @@ function Shell() {
   );
 }
 
-/** The browser's Back button leaves an open ticket (and Forward returns to it) without full routing. */
-function useHistorySync() {
-  const { ui } = useCtx();
-  useEffect(() => {
+/**
+ * The address bar follows the app: each view, project, saved view and ticket has its own URL, a navigation adds a
+ * history entry, and Back / Forward / a pasted link put the app where the URL says.
+ */
+function useRouting() {
+  const { ui, settings } = useCtx();
+  useLayoutEffect(() => {
     // Entries are tagged with this session so leftovers from elsewhere are never mistaken for ours.
     const session = Math.random().toString(36).slice(2);
-    const mine = (state: unknown): string | null => {
-      const st = state as { jl?: string; issue?: string } | null;
-      return st?.jl === session && st.issue ? st.issue : null;
+    const here = () => window.location.pathname;
+    let applying = false;
+
+    const current = (): Route => {
+      const s = ui.getState();
+      return { view: s.view, tab: s.projectTab, issue: s.detailOpen ? s.selectedKey : null, savedView: s.activeSavedView };
     };
-    let pushed = false;
+    const apply = (r: Route) => {
+      applying = true;
+      try {
+        const s = ui.getState();
+        const sv = r.savedView ? settings.getState().savedViews.find((v) => v.id === r.savedView) : undefined;
+        if (sv) {
+          if (s.activeSavedView !== sv.id || s.detailOpen) { settings.getState().setDisplay(sv.view, sv.display); s.openSavedView(sv); }
+        } else if (!r.issue || r.view !== "active") {
+          if (s.view !== r.view || s.activeSavedView || (s.detailOpen && !r.issue)) s.setView(r.view);
+          if (r.tab !== ui.getState().projectTab) ui.getState().setProjectTab(r.tab);
+        }
+        const now = ui.getState();
+        if (r.issue) { if (!now.detailOpen || now.selectedKey !== r.issue) now.openIssue(r.issue); }
+        else if (now.detailOpen) now.closeDetail();
+      } finally {
+        applying = false;
+      }
+    };
+
+    apply(parsePath(here()));
+    window.history.replaceState(null, "", formatPath(current()) + window.location.hash);
+
     const unsub = ui.subscribe((s, prev) => {
-      if (s.detailOpen && !prev.detailOpen) {
-        window.history.pushState({ jl: session, issue: s.selectedKey }, "");
-        pushed = true;
-      } else if (!s.detailOpen && prev.detailOpen && pushed) {
-        pushed = false;
-        if (mine(window.history.state)) window.history.back();
-      } else if (s.detailOpen && s.selectedKey !== prev.selectedKey && pushed) {
-        window.history.replaceState({ jl: session, issue: s.selectedKey }, ""); // stepping between tickets adds no history entries
+      if (applying) return;
+      const was = formatPath({ view: prev.view, tab: prev.projectTab, issue: prev.detailOpen ? prev.selectedKey : null, savedView: prev.activeSavedView });
+      const path = formatPath(current());
+      if (path === here()) return;
+      const st = window.history.state as { jl?: string; issue?: string; from?: string } | null;
+      const mine = st?.jl === session;
+      if (s.detailOpen && prev.detailOpen && mine && st?.issue) {
+        window.history.replaceState({ jl: session, issue: s.selectedKey, from: st.from }, "", path); // stepping between tickets adds no entries
+      } else if (!s.detailOpen && prev.detailOpen && mine && st?.issue && st.from === path) {
+        window.history.back(); // closing a ticket you opened from this page returns to it
+      } else {
+        window.history.pushState(s.detailOpen ? { jl: session, issue: s.selectedKey, from: was } : { jl: session }, "", path);
       }
     });
-    const onPop = (e: PopStateEvent) => {
-      const open = ui.getState().detailOpen;
-      const issue = mine(e.state);
-      if (open && !issue) { pushed = false; ui.getState().closeDetail(); }
-      else if (!open && issue) { pushed = true; ui.getState().openIssue(issue); }
-    };
+    const onPop = () => apply(parsePath(here()));
     window.addEventListener("popstate", onPop);
     return () => { unsub(); window.removeEventListener("popstate", onPop); };
-  }, [ui]);
+  }, [ui, settings]);
 }
 
 /**

@@ -159,6 +159,16 @@ Deno.test("static files are served and path traversal is blocked", () =>
     assertEquals((await get(app, "/%2e%2e/deno.json")).status, 404);
   }));
 
+Deno.test("paths of the app serve the page so links and reloads work; missing files stay 404", () =>
+  setup(async ({ app }) => {
+    for (const path of ["/backlog", "/issue/ABC-1", "/projects/ABC-9/issues"]) {
+      const res = await get(app, path);
+      assertEquals(res.status, 200);
+      assertStringIncludes(await res.text(), "<h1>hi</h1>");
+    }
+    assertEquals((await get(app, "/assets/missing.js")).status, 404);
+  }));
+
 Deno.test("unknown /api routes return 404 JSON", () =>
   setup(async ({ app }) => {
     const res = await get(app, "/api/nope");

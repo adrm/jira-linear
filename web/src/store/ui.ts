@@ -140,7 +140,7 @@ export function createUiStore() {
     clearFilters: () => set({ filtersByView: { ...get().filtersByView, [get().view]: [] } }),
     openSavedView(v) {
       set({
-        view: v.view as View, search: "", selectedKey: null, selection: [], anchor: null,
+        view: v.view as View, search: "", selectedKey: null, selection: [], anchor: null, detailOpen: false,
         filtersByView: { ...get().filtersByView, [v.view]: v.filters }, activeSavedView: v.id,
       });
     },
@@ -202,7 +202,7 @@ export function createUiStore() {
       else if (get().search) set({ search: "" });
     },
     setProjectTab: (projectTab) => set({ projectTab, selectedKey: null, selection: [], anchor: null }),
-    setView: (view) => set({ view, projectTab: "overview", search: "", selectedKey: null, selection: [], anchor: null, activeSavedView: null }),
+    setView: (view) => set({ view, projectTab: "overview", search: "", selectedKey: null, selection: [], anchor: null, activeSavedView: null, detailOpen: false }),
     setSearch: (search) => set({ search }),
   }));
 }

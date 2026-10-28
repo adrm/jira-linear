@@ -6,7 +6,7 @@ import { cleanup } from "@testing-library/react";
 import { configureSite } from "../lib/site";
 import { configureWorkflow } from "../lib/workflow";
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); window.history.replaceState(null, "", "/"); });
 
 // The app reads its project and workflow from the server; tests use this fixture instead.
 configureSite({ project: "ABC", siteUrl: "https://jira.example.test" });

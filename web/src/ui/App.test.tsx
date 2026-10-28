@@ -22,7 +22,9 @@ beforeEach(() => {
   server.addComment({ id: "c1", issueKey: "ABC-1", author: raul, bodyAdf: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: "Looks good to me" }] }] }, created: "2026-10-14T11:00:00.000+0000", updated: "2026-10-14T11:00:00.000+0000" });
 });
 
-async function renderApp(extra: Partial<Parameters<typeof App>[0]> = {}) {
+/** `at` starts the app on that URL instead of the Active list. */
+async function renderApp(extra: Partial<Parameters<typeof App>[0]> = {}, at?: string) {
+  if (at) window.history.replaceState(null, "", at);
   let n = 0;
   const app = createAppStore({ fetch: server.fetch, persistence: memoryPersistence(), newId: () => `t${++n}` });
   const ui = createUiStore();
@@ -32,8 +34,10 @@ async function renderApp(extra: Partial<Parameters<typeof App>[0]> = {}) {
   const copyText = vi.fn().mockResolvedValue(undefined);
   const user = userEvent.setup();
   render(<App app={app} ui={ui} settings={settings} fetchFn={server.fetch} jiraUrl="https://jira.test" openExternal={openExternal} copyText={copyText} pollMs={0} {...extra} />);
-  await screen.findByRole("listbox", { name: "Issues" });
-  await screen.findByText("Fix revenue chart");
+  if (!at) {
+    await screen.findByRole("listbox", { name: "Issues" });
+    await screen.findByText("Fix revenue chart");
+  }
   return { app, ui, user, openExternal, copyText, settings };
 }
 const rowOf = (key: string) => screen.getByRole("option", { name: new RegExp(`^${key}\\b`) });
@@ -1813,6 +1817,30 @@ describe("issue page", () => {
     expect(screen.queryByRole("region", { name: "Issue detail" })).toBeNull();
   });
 
+  it("the ticket has its own URL, and closing it returns to the list's URL without a new entry", async () => {
+    const { user } = await openFirst();
+    expect(window.location.pathname).toBe("/issue/ABC-1");
+    const entries = window.history.length;
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+    expect(list()).not.toBeNull();
+    expect(window.history.length).toBe(entries);
+  });
+
+  it("Forward returns to the ticket", async () => {
+    await openFirst();
+    window.history.back();
+    await screen.findByRole("listbox", { name: "Issues" });
+    window.history.forward();
+    await screen.findByRole("region", { name: "Issue detail" });
+    expect(window.location.pathname).toBe("/issue/ABC-1");
+  });
+
+  it("opens the ticket in a pasted /issue/KEY link", async () => {
+    await renderApp({}, "/issue/ABC-2");
+    expect(within(await screen.findByRole("region", { name: "Issue detail" })).getByRole("heading", { name: "Vendor access for Spotify" })).toBeInTheDocument();
+  });
+
   it("previous and next buttons step through the list you came from, with a counter", async () => {
     const { user } = await openFirst();
     expect(screen.getByText("1 of 2")).toBeInTheDocument();
@@ -3035,5 +3063,48 @@ describe("story points as a display property", () => {
     const { user } = await renderApp();
     await user.keyboard("{Meta>}b{/Meta}");
     expect(await within(await screen.findByRole("listbox", { name: "Issues" })).findByLabelText("5 story points")).toBeInTheDocument();
+  });
+});
+
+describe("routing", () => {
+  const nav = (name: string) => screen.getByRole("button", { name });
+
+  it("every view has its own URL and Back / Forward walk through them", async () => {
+    const { user } = await renderApp();
+    expect(window.location.pathname).toBe("/");
+    await user.keyboard("gb");
+    expect(window.location.pathname).toBe("/backlog");
+    await user.keyboard("gt");
+    expect(window.location.pathname).toBe("/all");
+    window.history.back();
+    await waitFor(() => expect(window.location.pathname).toBe("/backlog"));
+    expect(nav("Backlog")).toHaveAttribute("aria-current", "page");
+    window.history.back();
+    await waitFor(() => expect(nav("Active")).toHaveAttribute("aria-current", "page"));
+    window.history.forward();
+    await waitFor(() => expect(nav("Backlog")).toHaveAttribute("aria-current", "page"));
+  });
+
+  it("starts on the view named by the URL", async () => {
+    await renderApp({}, "/backlog");
+    expect(nav("Backlog")).toHaveAttribute("aria-current", "page");
+    expect(window.location.pathname).toBe("/backlog");
+  });
+
+  it("an unknown path lands on the home view and fixes the URL", async () => {
+    await renderApp({}, "/nowhere");
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("a project and its tabs have URLs", async () => {
+    seedProjects();
+    const { user } = await renderApp();
+    await user.keyboard("gpj{Enter}");
+    await screen.findByRole("region", { name: "Project Platform migration" });
+    expect(window.location.pathname).toMatch(/^\/projects\/[^/]+$/);
+    await user.click(screen.getByRole("tab", { name: /Issues/ }));
+    expect(window.location.pathname).toMatch(/^\/projects\/[^/]+\/issues$/);
+    window.history.back();
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true"));
   });
 });

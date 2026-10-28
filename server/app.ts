@@ -101,6 +101,12 @@ export function createApp(opts: AppOptions) {
       const ext = rel.split(".").pop() ?? "";
       return new Response(data, { headers: { "content-type": MIME[ext] ?? "application/octet-stream" } });
     } catch {
+      // Pages of the app live at their own paths (/backlog, /issue/ABC-1); files have an extension.
+      if (!rel.split("/").pop()!.includes(".")) {
+        try {
+          return new Response(await Deno.readFile(`${opts.staticDir}/index.html`), { headers: { "content-type": MIME.html } });
+        } catch { /* not built yet */ }
+      }
       return json({ error: "Not found" }, 404);
     }
   }
