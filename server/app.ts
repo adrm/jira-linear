@@ -68,9 +68,19 @@ export function createApp(opts: AppOptions) {
     }
   }
 
+  async function resolveMe() {
+    if (!me) {
+      const u = await client.getMyself();
+      me = { id: u.accountId, name: u.displayName };
+    }
+    return me;
+  }
+
   async function runSync() {
     try {
-      const r = await syncOnce(deps);
+      // Without the owner's id the sync still mirrors Jira; it just leaves the inbox alone.
+      const meId = await resolveMe().then((u) => u.id, () => undefined);
+      const r = await syncOnce({ ...deps, meId });
       lastSyncAt = new Date().toISOString();
       lastError = null;
       if (r.changed > 0) notify();
@@ -160,11 +170,7 @@ export function createApp(opts: AppOptions) {
     }
     if (req.method === "GET" && pathname === "/api/me") {
       try {
-        if (!me) {
-          const u = await client.getMyself();
-          me = { id: u.accountId, name: u.displayName };
-        }
-        return json(me);
+        return json(await resolveMe());
       } catch (e) {
         return json({ error: e instanceof Error ? e.message : String(e) }, 502);
       }

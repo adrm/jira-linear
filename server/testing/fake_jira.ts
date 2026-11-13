@@ -52,11 +52,13 @@ export interface SeedIssue {
   statusChanged?: string | null;
   points?: number | null;
   resolution?: string | null;
+  /** the test user watches this issue (answers `watcher = currentUser()`) */
+  watching?: boolean;
 }
 
 export class FakeJira {
   issues = new Map<string, Raw>();
-  histories = new Map<string, Array<{ at: string; from: string; to: string; field?: string; author?: { accountId: string; displayName: string } }>>();
+  histories = new Map<string, Array<{ at: string; from: string; to: string; field?: string; fromId?: string; toId?: string; author?: { accountId: string; displayName: string } }>>();
   remoteLinks = new Map<string, Raw[]>();
   comments = new Map<string, Raw[]>();
   requests: Array<{ method: string; path: string; body: unknown }> = [];
@@ -94,6 +96,7 @@ export class FakeJira {
     const raw: Raw = {
       id: String(n),
       key,
+      watching: !!s.watching,
       fields: {
         summary: s.summary ?? `Issue ${key}`,
         description: s.description ?? null,
@@ -126,12 +129,17 @@ export class FakeJira {
     return raw;
   }
 
+  /** Jira's history ids are unique across the whole site, not per issue. */
+  private historyId(issue: Raw, index: number): string {
+    return `${issue.id}${String(index + 1).padStart(3, "0")}`;
+  }
+
   private parentRef(key: string) {
     const p = this.issues.get(key);
     return { id: p?.id ?? "0", key, fields: { summary: p?.fields.summary ?? key } };
   }
 
-  setHistory(key: string, entries: Array<{ at: string; from: string; to: string; field?: string; author?: { accountId: string; displayName: string } }>) {
+  setHistory(key: string, entries: Array<{ at: string; from: string; to: string; field?: string; fromId?: string; toId?: string; author?: { accountId: string; displayName: string } }>) {
     this.histories.set(key, entries);
   }
   setResolved(key: string, at: string | null) {
@@ -239,7 +247,7 @@ export class FakeJira {
       const slice = all.slice(startAt, startAt + size);
       return this.json({
         startAt, maxResults: size, total: all.length, isLast: startAt + size >= all.length,
-        values: slice.map((h, i) => ({ id: String(startAt + i + 1), created: h.at, author: h.author ?? null, items: [{ field: h.field ?? "status", fromString: h.from || null, toString: h.to || null }] })),
+        values: slice.map((h, i) => ({ id: this.historyId(this.issues.get(m![1]), startAt + i), created: h.at, author: h.author ?? null, items: [{ field: h.field ?? "status", from: h.fromId, to: h.toId, fromString: h.from || null, toString: h.to || null }] })),
       });
     }
     if ((m = path.match(/^\/issue\/([A-Z]+-\d+)\/remotelink$/))) {
@@ -280,6 +288,7 @@ export class FakeJira {
     let rows = [...this.issues.values()];
     const proj = jql.match(/project\s*=\s*"?([A-Z]+)"?/);
     if (proj) rows = rows.filter((r) => r.key.startsWith(proj[1] + "-"));
+    if (/watcher\s*=\s*currentUser\(\)/.test(jql)) rows = rows.filter((r) => r.watching);
     const par = jql.match(/parent\s*=\s*"?([A-Z]+-\d+)"?/);
     if (par) rows = rows.filter((r) => r.fields.parent?.key === par[1]);
     const upd = jql.match(/updated\s*>=\s*"(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2})"/);
@@ -314,7 +323,10 @@ export class FakeJira {
     const out: Raw = { id: raw.id, key: raw.key, fields };
     if (expand === "changelog") {
       out.changelog = {
-        histories: (this.histories.get(raw.key) ?? []).map((h) => ({ created: h.at, items: [{ field: h.field ?? "status", fromString: h.from, toString: h.to }] })),
+        histories: (this.histories.get(raw.key) ?? []).map((h, i) => ({
+          id: this.historyId(raw, i), created: h.at, author: h.author ?? null,
+          items: [{ field: h.field ?? "status", from: h.fromId, to: h.toId, fromString: h.from, toString: h.to }],
+        })),
       };
     }
     return out;

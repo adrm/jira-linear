@@ -284,3 +284,24 @@ Deno.test("config tells the client the project and the workflow Jira reports", (
     assertEquals(body.vocab, {});
     assertEquals(JSON.stringify(body).includes(TOKEN), false);
   }));
+
+Deno.test("the poll loop feeds the inbox with the owner's id, and still syncs when Jira cannot say who that is", () =>
+  setup(async ({ fake, app, store }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1", assignee: { accountId: "me", displayName: "Me" } });
+    await app.tick();
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: { accountId: "ana", displayName: "Ana" } }]);
+    fake.touch("ABC-1");
+    await app.tick();
+    assertEquals(store.inbox().map((e) => [e.key, e.events.length]), [["ABC-1", 1]]);
+  }));
+
+Deno.test("when /myself fails the sync still runs, without touching the inbox", () =>
+  setup(async ({ fake, app, store }) => {
+    fake.failures.push({ status: 500, body: { errorMessages: ["boom"] } });
+    fake.seed({ key: "ABC-1" });
+    await app.tick();
+    assertEquals(store.delta(0).issues.map((i) => i.key), ["ABC-1"]);
+    assertEquals(store.getKv("inbox_installed_at"), null);
+  }));

@@ -3,6 +3,7 @@ import { openStore } from "./db.ts";
 import { createJiraClient } from "./jira.ts";
 import { reconcile, syncOnce, toJqlMinute } from "./sync.ts";
 import { FAKE_FIELDS, FakeJira } from "./testing/fake_jira.ts";
+import { DEFAULT_RULES } from "../shared/inbox.ts";
 
 async function setup(fn: (ctx: { fake: FakeJira; store: ReturnType<typeof openStore>; deps: Parameters<typeof syncOnce>[0] }) => Promise<void>) {
   const fake = new FakeJira().start();
@@ -131,4 +132,154 @@ Deno.test("syncOnce only ever queries the configured project", () =>
     await syncOnce(deps);
     const searches = fake.requests.filter((r) => r.path === "/search/jql");
     for (const s of searches) assertEquals(/project\s*=\s*"?ABC"?/.test((s.body as { jql: string }).jql), true);
+  }));
+
+const ME = { accountId: "me", displayName: "Me" };
+const ANA = { accountId: "ana", displayName: "Ana" };
+const inboxDeps = (deps: Parameters<typeof syncOnce>[0]) => ({ ...deps, meId: "me" });
+
+Deno.test("inbox: a full first sync stores no entries, even for tickets with fresh history and comments", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1", assignee: ME });
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T08:30:00.000+0000", from: "Backlog", to: "In Development", author: ANA }]);
+    fake.addCommentDirect("ABC-1", "hello", ANA);
+    const r = await syncOnce(inboxDeps(deps));
+    assertEquals(r.mode, "full");
+    assertEquals(store.inbox(), []);
+  }));
+
+Deno.test("inbox: after the first sync, a colleague's status change and new comment make one entry with both events", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1", assignee: ME });
+    await syncOnce(inboxDeps(deps));
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
+    fake.addCommentDirect("ABC-1", "please look", ANA);
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    const [entry, ...rest] = store.inbox();
+    assertEquals(rest.length, 0);
+    assertEquals([entry.key, entry.state], ["ABC-1", "unread"]);
+    assertEquals(entry.events.map((e) => e.kind), ["status", "comment"]);
+  }));
+
+Deno.test("inbox: syncing again, including a run that re-reads the same issue through the overlap window, adds nothing", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1", assignee: ME });
+    await syncOnce(inboxDeps(deps));
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    const first = store.inbox();
+    await syncOnce(inboxDeps(deps));
+    fake.touch("ABC-1", "2026-10-15T09:10:30.000+0000"); // the same minute as the cursor: read again
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox().map((e) => e.events.length), [1]);
+    assertEquals(store.inbox()[0].events[0].id, first[0].events[0].id);
+  }));
+
+Deno.test("inbox: history and comments dated before the install time give nothing, later ones do, on a store that already has a cursor", () =>
+  setup(async ({ fake, store, deps }) => {
+    fake.seed({ key: "ABC-1", assignee: ME });
+    await syncOnce(deps); // an install from before the inbox existed: cursor set, no inbox bookkeeping
+    store.setKv("inbox_installed_at", "2026-10-15T09:30:00.000Z");
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
+    fake.addCommentDirect("ABC-1", "old news", ANA);
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox(), []);
+    fake.now = "2026-10-15T09:40:00.000+0000";
+    fake.setHistory("ABC-1", [
+      { at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA },
+      { at: "2026-10-15T09:40:00.000+0000", from: "In Review", to: "Done", author: ANA },
+    ]);
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox().map((e) => e.events.map((v) => v.to)), [["Done"]]);
+  }));
+
+Deno.test("inbox: a watched ticket counts as involved under scope involved, an unwatched stranger's does not", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1", watching: true });
+    fake.seed({ key: "ABC-2" });
+    await syncOnce(inboxDeps(deps));
+    assertEquals([...store.watched()], ["ABC-1"]);
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    for (const key of ["ABC-1", "ABC-2"]) {
+      fake.setHistory(key, [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
+      fake.touch(key);
+    }
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox().map((e) => e.key), ["ABC-1"]);
+    store.setInboxRules({ ...DEFAULT_RULES, scope: "project" });
+    fake.now = "2026-10-15T09:20:00.000+0000";
+    fake.setHistory("ABC-2", [{ at: "2026-10-15T09:15:00.000+0000", from: "In Review", to: "Done", author: ANA }]);
+    fake.touch("ABC-2");
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox().map((e) => e.key).sort(), ["ABC-1", "ABC-2"]);
+  }));
+
+Deno.test("inbox: with status changes off no status event is stored, and the owner's own changes add nothing", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1", assignee: ME });
+    await syncOnce(inboxDeps(deps));
+    store.setInboxRules({ ...DEFAULT_RULES, status: { mode: "off" } });
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox(), []);
+    store.setInboxRules(DEFAULT_RULES);
+    fake.now = "2026-10-15T09:20:00.000+0000";
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T09:15:00.000+0000", from: "In Review", to: "Done", author: ME }]);
+    fake.addCommentDirect("ABC-1", "mine", ME);
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox(), []);
+  }));
+
+Deno.test("inbox: a mention of the owner in a comment is delivered on a ticket that is otherwise not theirs", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1" });
+    await syncOnce(inboxDeps(deps));
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    const c = fake.addCommentDirect("ABC-1", "x", ANA);
+    c.body = { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "mention", attrs: { id: "me", text: "@Me" } }, { type: "text", text: " can you check?" }] }] };
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    const [entry] = store.inbox();
+    assertEquals(entry.events.map((e) => [e.kind, e.mentionsMe]), [["comment", true]]);
+  }));
+
+Deno.test("inbox: without an owner id the sync touches no inbox state", () =>
+  setup(async ({ fake, store, deps }) => {
+    fake.seed({ key: "ABC-1", assignee: ME });
+    await syncOnce(deps);
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
+    fake.touch("ABC-1");
+    await syncOnce(deps);
+    assertEquals(store.inbox(), []);
+    assertEquals(store.getKv("inbox_installed_at"), null);
+  }));
+
+Deno.test("inbox: a ticket whose embedded history is at Jira's cap gets its full changelog fetched", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1", assignee: ME });
+    await syncOnce(inboxDeps(deps));
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-1", Array.from({ length: 100 }, (_, i) => ({ at: "2026-10-15T09:05:00.000+0000", from: `S${i}`, to: `S${i + 1}`, author: ANA })));
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    assertEquals(fake.requests.some((r) => r.path.startsWith("/issue/ABC-1/changelog")), true);
+    assertEquals(store.inbox()[0].events.length, 100);
   }));

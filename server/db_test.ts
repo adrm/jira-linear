@@ -306,3 +306,19 @@ Deno.test("inbox: the install time is recorded once, rules round-trip and defaul
   s.setWatched(["ABC-3"]);
   assertEquals([...s.watched()], ["ABC-3"]);
 });
+
+Deno.test("commentsOf returns the live comments of one issue", () => {
+  const s = openStore(":memory:");
+  s.replaceComments("ABC-1", [comment("c1", "ABC-1"), comment("c2", "ABC-1")]);
+  s.replaceComments("ABC-2", [comment("c3", "ABC-2")]);
+  s.replaceComments("ABC-1", [comment("c2", "ABC-1")]);
+  assertEquals(s.commentsOf("ABC-1").map((c) => c.id), ["c2"]);
+  assertEquals(s.commentsOf("ABC-9"), []);
+});
+
+Deno.test("hasIssue is true for a mirrored issue, also a tombstoned one, and false for an unknown key", () => {
+  const s = openStore(":memory:");
+  s.upsertIssue(issue("ABC-1"));
+  s.tombstoneMissing(["ABC-9"]);
+  assertEquals([s.hasIssue("ABC-1"), s.hasIssue("ABC-2")], [true, false]);
+});

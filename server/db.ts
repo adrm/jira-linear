@@ -7,6 +7,10 @@ export interface Store {
   upsertIssue(issue: Issue): boolean;
   upsertComment(comment: Comment): boolean;
   replaceComments(issueKey: string, comments: Comment[]): void;
+  /** whether the issue is in the mirror at all (a tombstoned one still is) */
+  hasIssue(key: string): boolean;
+  /** the live comments of one issue as last synced */
+  commentsOf(issueKey: string): Comment[];
   tombstoneMissing(liveKeys: string[]): number;
   delta(since: number): Delta;
   /** tickets marked for team review; lives only in this local database, never in Jira */
@@ -191,6 +195,11 @@ export function openStore(path: string): Store {
         }
         for (const c of comments) upsertComment(c);
       });
+    },
+    hasIssue: (key) => db.prepare("SELECT 1 FROM issue WHERE key = ?").get(key) !== undefined,
+    commentsOf(issueKey) {
+      return (db.prepare("SELECT data FROM comment WHERE issue_key = ? AND deleted = 0 ORDER BY id").all(issueKey) as Array<{ data: string }>)
+        .map((r) => JSON.parse(r.data) as Comment);
     },
     tombstoneMissing(liveKeys) {
       return tx(() => {
