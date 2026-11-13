@@ -1,0 +1,55 @@
+/** Wire types for the inbox, shared by server and web client. */
+import type { UserRef } from "./types.ts";
+
+export type InboxEventKind =
+  | "created" | "status" | "assignee" | "priority" | "duedate" | "summary" | "labels" | "type" | "parent" | "links" | "comment";
+
+export interface InboxEvent {
+  /** `h:<history id>:<item index>`, `c:<comment id>` or `new:<key>`; the same change always has the same id */
+  id: string;
+  key: string;
+  kind: InboxEventKind;
+  at: string;
+  author: UserRef | null;
+  from: string | null;
+  to: string | null;
+  /** first characters of a comment */
+  excerpt?: string;
+  mentionsMe?: boolean;
+  assignment?: "to-me" | "from-me";
+}
+
+export type InboxState = "unread" | "read" | "archived";
+
+export interface InboxEntry {
+  key: string;
+  state: InboxState;
+  updatedAt: string;
+  /** when the entry was last read; events after it are the ones not seen yet */
+  readAt: string | null;
+  /** oldest first */
+  events: InboxEvent[];
+}
+
+export type InboxAction = "read" | "unread" | "archive" | "unarchive" | "delete";
+
+export interface InboxRules {
+  /** tickets the owner is involved in, or the whole project; applies to every row except mentions, assignment and new tickets */
+  scope: "involved" | "project";
+  mentions: boolean;
+  assigned: boolean;
+  status: { mode: "off" | "any" } | { mode: "into"; statuses: string[] };
+  comments: "off" | "mentions" | "all";
+  newTickets: { mode: "off" | "assigned" | "all" | "epics"; epics: string[] };
+  fields: { priority: boolean; duedate: boolean; summary: boolean; labels: boolean; type: boolean; parent: boolean; links: boolean };
+}
+
+export const DEFAULT_RULES: InboxRules = {
+  scope: "involved",
+  mentions: true,
+  assigned: true,
+  status: { mode: "any" },
+  comments: "all",
+  newTickets: { mode: "assigned", epics: [] },
+  fields: { priority: false, duedate: false, summary: false, labels: false, type: false, parent: false, links: false },
+};
