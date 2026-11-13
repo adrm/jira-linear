@@ -14,7 +14,7 @@ export interface Settings {
   /** launchd label for `service:install` */
   serviceLabel?: string;
   /** Jira field names or ids; names are looked up through Jira's field list, an id (customfield_123) is used as is */
-  fields?: { storyPoints?: string; quarter?: string; initialEstimate?: string; revisedEstimate?: string };
+  fields?: { storyPoints?: string; quarter?: string; initialEstimate?: string; revisedEstimate?: string; qaAssignee?: string };
   /** Names that depend on the Jira site and its language; each key replaces its default list */
   vocab?: {
     /** priority name -> rank 0 (lowest) to 4 (highest); unlisted priorities count as 2 */

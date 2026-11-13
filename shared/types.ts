@@ -25,6 +25,8 @@ export interface Issue {
   issuetype: string;
   priority: string | null;
   assignee: UserRef | null;
+  /** Jira "QA Assignee" (a multi-user custom field); empty when unset or the field is not configured */
+  qaAssignees: UserRef[];
   reporter: UserRef | null;
   parentKey: string | null;
   parentSummary: string | null;

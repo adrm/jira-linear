@@ -28,6 +28,7 @@ export function normalizeIssue(raw: Raw, fields: FieldIds = {}): Issue {
   const get = (id?: string) => (id ? f[id] : undefined);
   const quarter = get(fields.quarter);
   const points = get(fields.storyPoints);
+  const qa = get(fields.qaAssignee);
   return {
     key: raw.key,
     id: raw.id,
@@ -40,6 +41,7 @@ export function normalizeIssue(raw: Raw, fields: FieldIds = {}): Issue {
     priority: f.priority?.name ?? null,
     assignee: user(f.assignee),
     reporter: user(f.reporter),
+    qaAssignees: Array.isArray(qa) ? qa.flatMap((u: Raw) => user(u) ?? []) : [],
     parentKey: f.parent?.key ?? null,
     parentSummary: f.parent?.fields?.summary ?? null,
     labels: f.labels ?? [],

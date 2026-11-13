@@ -53,7 +53,7 @@ export function applyLocal(issues: IssueMap, m: Mutation, ctx: LocalContext): Is
         status: m.status ?? WORKFLOW_STATUSES.find((s) => s.category === "new")?.name ?? "To Do", statusCategory: m.status ? ctx.statuses[m.status] ?? "indeterminate" : "new",
         issuetype: m.issuetype, priority: m.priority ?? null,
         assignee: m.assigneeId ? { id: m.assigneeId, name: ctx.users[m.assigneeId] ?? m.assigneeId } : null,
-        reporter: null, parentKey: m.parentKey ?? null,
+        reporter: null, qaAssignees: [], parentKey: m.parentKey ?? null,
         parentSummary: m.parentKey ? issues[m.parentKey]?.summary ?? null : null,
         labels: m.labels ?? [], duedate: m.duedate ?? null, created: now, updated: now, links: [],
         quarter: null, initialEstimate: null, revisedEstimate: null, statusChanged: null, storyPoints: null, resolution: null,

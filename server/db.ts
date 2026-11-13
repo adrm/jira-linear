@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS mutation_log (id TEXT PRIMARY KEY, result TEXT NOT NU
 `;
 
 /** Bump when synced data gains fields, so an existing mirror is fetched again in full. */
-const SCHEMA_VERSION = "3";
+const SCHEMA_VERSION = "4";
 
 export function openStore(path: string): Store {
   const db = new DatabaseSync(path);

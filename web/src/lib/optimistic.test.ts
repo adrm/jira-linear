@@ -6,7 +6,7 @@ const base = (key: string, over: Partial<Issue> = {}): Issue => ({
   key, id: "1", project: "ABC", summary: "S", descriptionAdf: null, status: "Backlog", statusCategory: "new",
   issuetype: "Task", priority: "Medium", assignee: null, reporter: null, parentKey: null, parentSummary: null,
   labels: [], duedate: null, created: "2026-10-01T00:00:00.000+0000", updated: "2026-10-01T00:00:00.000+0000", links: [],
-  quarter: null, initialEstimate: null, revisedEstimate: null, statusChanged: null, storyPoints: null, resolution: null, ...over,
+  qaAssignees: [], quarter: null, initialEstimate: null, revisedEstimate: null, statusChanged: null, storyPoints: null, resolution: null, ...over,
 });
 const world = (): IssueMap => ({ "ABC-1": base("ABC-1"), "ABC-2": base("ABC-2", { issuetype: "Epic", summary: "Epic two" }) });
 const ctx = { statuses: { "In Development": "indeterminate", Cerrada: "done" } as Record<string, string>, users: { u1: "Ana" } as Record<string, string> };

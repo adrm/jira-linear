@@ -144,6 +144,12 @@ export function IssuePage() {
           <PropRow label="Assignee" value={issue.assignee?.name ?? "Unassigned"} onClick={() => pick("assignee")}>
             <Avatar name={issue.assignee?.name ?? null} />{issue.assignee?.name ?? "Unassigned"}
           </PropRow>
+          <div className="side-row is-static" aria-label={`QA assignee: ${issue.qaAssignees.map((u) => u.name).join(", ") || "none"}`}>
+            <span className="side-row-label">QA assignee</span>
+            <span className="side-row-value">
+              {issue.qaAssignees.length ? issue.qaAssignees.map((u) => <span key={u.id} className="qa-user"><Avatar name={u.name} />{u.name}</span>) : <span className="muted">No QA assignee</span>}
+            </span>
+          </div>
           <PropRow label="Type" value={type} onClick={() => pick("labels")}>
             <span className={`chip chip-type chip-${type.toLowerCase()}`}><i className="dot" />{type}</span>
           </PropRow>

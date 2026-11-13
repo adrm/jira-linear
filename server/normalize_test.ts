@@ -33,6 +33,7 @@ Deno.test("normalizeIssue flattens a Jira issue into the wire shape", () => {
     priority: "High",
     assignee: { id: "a1", name: "Ana" },
     reporter: { id: "r1", name: "Raul" },
+    qaAssignees: [],
     parentKey: "ABC-1",
     parentSummary: "Epic",
     labels: ["CA:frontend"],
@@ -61,6 +62,13 @@ Deno.test("several quarters are joined, and missing planning fields are null", (
   assertEquals(normalizeIssue(fake.seed({ key: "ABC-6", quarter: ["FY2027 Q2", "FY2027 Q3"] })).quarter, "FY2027 Q2, FY2027 Q3");
   const none = normalizeIssue(fake.seed({ key: "ABC-7" }));
   assertEquals([none.quarter, none.initialEstimate, none.revisedEstimate, none.statusChanged], [null, null, null, null]);
+});
+
+Deno.test("normalizeIssue reads the QA Assignee users", () => {
+  const fake = new FakeJira();
+  const raw = fake.seed({ key: "ABC-8", qa: [{ accountId: "q1", displayName: "Quinn" }, { accountId: "q2", displayName: "Quay" }] });
+  assertEquals(normalizeIssue(raw).qaAssignees, [{ id: "q1", name: "Quinn" }, { id: "q2", name: "Quay" }]);
+  assertEquals(normalizeIssue(fake.seed({ key: "ABC-9" })).qaAssignees, []);
 });
 
 Deno.test("normalizeIssue handles missing optional fields", () => {

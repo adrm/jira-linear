@@ -15,6 +15,7 @@ function issue(key: string, over: Partial<Issue> = {}): Issue {
     priority: "Medium",
     assignee: null,
     reporter: null,
+    qaAssignees: [],
     parentKey: null,
     parentSummary: null,
     labels: [],

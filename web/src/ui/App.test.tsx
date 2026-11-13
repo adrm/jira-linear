@@ -2713,6 +2713,16 @@ describe("story points", () => {
     await user.keyboard("]"); // next ticket in the list
     expect(await screen.findByText(/No estimate, counts as 3/)).toBeInTheDocument();
   });
+
+  it("the ticket page shows the QA assignees, or says there are none", async () => {
+    server.put(mkIssue("ABC-96", { summary: "With QA", status: "In Development", statusCategory: "indeterminate", qaAssignees: [{ id: "q1", name: "Quinn" }, { id: "q2", name: "Quay" }], updated: "2026-10-14T12:00:00.000+0000" }));
+    server.put(mkIssue("ABC-97", { summary: "Without QA", status: "In Development", statusCategory: "indeterminate", updated: "2026-10-14T11:00:00.000+0000" }));
+    const { user } = await renderApp();
+    await user.dblClick(rowOf("ABC-96"));
+    expect(await screen.findByLabelText("QA assignee: Quinn, Quay")).toBeInTheDocument();
+    await user.keyboard("]");
+    expect(await screen.findByLabelText("QA assignee: none")).toBeInTheDocument();
+  });
 });
 
 describe("project page tabs", () => {

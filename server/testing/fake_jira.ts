@@ -25,6 +25,7 @@ export const FAKE_FIELDS = {
   quarter: "customfield_13581",
   initialEstimate: "customfield_13182",
   revisedEstimate: "customfield_13280",
+  qaAssignee: "customfield_11208",
 };
 
 // deno-lint-ignore no-explicit-any
@@ -38,6 +39,7 @@ export interface SeedIssue {
   priority?: string;
   assignee?: FakeUser | null;
   reporter?: FakeUser | null;
+  qa?: FakeUser[];
   labels?: string[];
   parent?: string | null;
   duedate?: string | null;
@@ -112,6 +114,7 @@ export class FakeJira {
         customfield_13581: (s.quarter ?? []).map((value, i) => ({ id: String(i), value })),
         customfield_13182: s.initial ?? null,
         customfield_13280: s.revised ?? null,
+        customfield_11208: (s.qa ?? []).map((u) => ({ ...u, active: true })),
         statuscategorychangedate: s.statusChanged ?? null,
         customfield_10002: s.points ?? null,
         resolution: s.resolution ? { name: s.resolution } : null,

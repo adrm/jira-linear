@@ -7,6 +7,7 @@ export interface FieldIds {
   quarter?: string;
   initialEstimate?: string;
   revisedEstimate?: string;
+  qaAssignee?: string;
 }
 
 /** What to look for when the settings name no field: names Jira sites commonly use. */
@@ -15,6 +16,7 @@ const CANDIDATES: Record<keyof FieldIds, string[]> = {
   quarter: ["quarter"],
   initialEstimate: ["initial estimate", "initial estimated date", "initial target date"],
   revisedEstimate: ["revised estimate", "revised estimated date", "revised target date"],
+  qaAssignee: ["qa assignee"],
 };
 
 const isId = (s: string) => /^customfield_\d+$/.test(s);

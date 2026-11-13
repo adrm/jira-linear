@@ -340,6 +340,7 @@ dl { margin: 0; }
 button.side-row:hover { background: var(--hover); }
 .side-row-label { width: 76px; flex: none; color: var(--muted); padding-top: 3px; }
 .side-row-value { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-width: 0; min-height: 24px; color: var(--text); }
+.qa-user { display: inline-flex; align-items: center; gap: 6px; }
 .members { display: flex; flex-wrap: wrap; gap: 4px 10px; list-style: none; margin: 0; padding: 0; }
 .members li { display: inline-flex; align-items: center; gap: 6px; }
 .side-empty { margin: 4px 0 8px; font-size: 12.5px; }

@@ -5,7 +5,7 @@ export const mkIssue = (key: string, over: Partial<Issue> = {}): Issue => ({
   status: "Backlog", statusCategory: "new", issuetype: "Task", priority: "Medium", assignee: null, reporter: null,
   parentKey: null, parentSummary: null, labels: [], duedate: null,
   created: "2026-10-01T00:00:00.000+0000", updated: "2026-10-01T00:00:00.000+0000", links: [],
-  quarter: null, initialEstimate: null, revisedEstimate: null, statusChanged: null, storyPoints: null, resolution: null, ...over,
+  qaAssignees: [], quarter: null, initialEstimate: null, revisedEstimate: null, statusChanged: null, storyPoints: null, resolution: null, ...over,
 });
 
 /** In-memory stand-in for the jira-linear HTTP API, exposed as a fetch function. */
