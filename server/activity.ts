@@ -2,7 +2,8 @@
 import type { ActivityEntry } from "../shared/types.ts";
 import type { JiraClient } from "./jira.ts";
 
-const FIELDS: Record<string, string> = {
+/** Jira changelog field name (lower case) -> the name this app uses for it. */
+export const FIELDS: Record<string, string> = {
   status: "status", assignee: "assignee", priority: "priority", summary: "summary", labels: "labels",
   issuetype: "type", duedate: "duedate", parent: "parent",
 };
