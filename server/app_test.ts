@@ -3,6 +3,7 @@ import { createApp } from "./app.ts";
 import { openStore } from "./db.ts";
 import { createJiraClient } from "./jira.ts";
 import { FAKE_FIELDS, FakeJira } from "./testing/fake_jira.ts";
+import { DEFAULT_RULES, type InboxEvent } from "../shared/inbox.ts";
 
 const TOKEN = "super-secret-token-value";
 
@@ -304,4 +305,91 @@ Deno.test("when /myself fails the sync still runs, without touching the inbox", 
     await app.tick();
     assertEquals(store.delta(0).issues.map((i) => i.key), ["ABC-1"]);
     assertEquals(store.getKv("inbox_installed_at"), null);
+  }));
+
+const put = (app: ReturnType<typeof createApp>, path: string, body: unknown) =>
+  app.handler(new Request(`http://localhost:8766${path}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
+const inboxEvent = (id: string, key: string): InboxEvent => ({ id, key, kind: "status", at: "2026-11-13T10:00:00.000Z", author: null, from: "A", to: "B" });
+
+Deno.test("GET /api/inbox returns the entries with their events", () =>
+  setup(async ({ app, store }) => {
+    store.addInboxEvents([inboxEvent("e1", "ABC-1"), inboxEvent("e2", "ABC-2")]);
+    const res = await get(app, "/api/inbox");
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    assertEquals(body.map((e: { key: string }) => e.key).sort(), ["ABC-1", "ABC-2"]);
+    assertEquals(body[0].events.length, 1);
+  }));
+
+Deno.test("POST /api/inbox applies read, unread, archive, unarchive and delete", () =>
+  setup(async ({ app, store }) => {
+    store.addInboxEvents([inboxEvent("e1", "ABC-1"), inboxEvent("e2", "ABC-2")]);
+    const state = (key: string) => store.inbox().find((e) => e.key === key)?.state;
+    for (const [action, expected] of [["read", "read"], ["unread", "unread"], ["archive", "archived"], ["unarchive", "read"]] as const) {
+      const res = await post(app, "/api/inbox", { keys: ["ABC-1"], action });
+      assertEquals([res.status, await res.json()], [200, { ok: true }]);
+      assertEquals(state("ABC-1"), expected);
+    }
+    assertEquals(state("ABC-2"), "unread");
+    await post(app, "/api/inbox", { keys: ["ABC-1", "ABC-2"], action: "delete" });
+    assertEquals(store.inbox(), []);
+  }));
+
+Deno.test("POST /api/inbox refuses bad keys, empty or oversized key lists and unknown actions", () =>
+  setup(async ({ app, store }) => {
+    store.addInboxEvents([inboxEvent("e1", "ABC-1")]);
+    const bad = [
+      { keys: ["XYZ-1"], action: "read" },
+      { keys: [], action: "read" },
+      { keys: Array.from({ length: 501 }, (_, i) => `ABC-${i + 1}`), action: "read" },
+      { keys: "ABC-1", action: "read" },
+      { keys: ["ABC-1"], action: "explode" },
+      { keys: ["ABC-1"] },
+    ];
+    for (const body of bad) assertEquals((await post(app, "/api/inbox", body)).status, 400);
+    const res = await app.handler(new Request("http://localhost:8766/api/inbox", { method: "POST", body: "not json" }));
+    assertEquals(res.status, 400);
+    assertEquals(store.inbox()[0].state, "unread");
+  }));
+
+Deno.test("rules: GET gives the defaults, PUT stores new rules and GET returns them", () =>
+  setup(async ({ app }) => {
+    assertEquals(await (await get(app, "/api/inbox/rules")).json(), DEFAULT_RULES);
+    const next = { ...DEFAULT_RULES, scope: "project", status: { mode: "into", statuses: ["In Review"] } };
+    const res = await put(app, "/api/inbox/rules", next);
+    assertEquals([res.status, await res.json()], [200, next]);
+    assertEquals(await (await get(app, "/api/inbox/rules")).json(), next);
+  }));
+
+Deno.test("rules: malformed rules are refused with 400 and the stored rules stay as they were", () =>
+  setup(async ({ app }) => {
+    const good = { ...DEFAULT_RULES, scope: "project" };
+    await put(app, "/api/inbox/rules", good);
+    const bad: unknown[] = [
+      { ...good, scope: "everything" },
+      { ...good, status: { mode: "into", statuses: [] } },
+      { ...good, fields: { ...good.fields, priority: "yes" } },
+      { ...good, comments: 4 },
+      "rules",
+      null,
+    ];
+    for (const body of bad) assertEquals((await put(app, "/api/inbox/rules", body)).status, 400);
+    const res = await app.handler(new Request("http://localhost:8766/api/inbox/rules", { method: "PUT", body: "not json" }));
+    assertEquals(res.status, 400);
+    assertEquals(await (await get(app, "/api/inbox/rules")).json(), good);
+  }));
+
+Deno.test("inbox changes tell connected pages to refresh", () =>
+  setup(async ({ app, store }) => {
+    store.addInboxEvents([inboxEvent("e1", "ABC-1")]);
+    const res = await get(app, "/api/events");
+    const reader = res.body!.getReader();
+    await reader.read(); // the greeting
+    await post(app, "/api/inbox", { keys: ["ABC-1"], action: "read" });
+    let timer = 0;
+    const next = await Promise.race([reader.read(), new Promise<null>((r) => (timer = setTimeout(() => r(null), 1000)))]);
+    clearTimeout(timer);
+    await reader.cancel();
+    assertEquals(next !== null, true, "no refresh event arrived");
+    assertStringIncludes(new TextDecoder().decode(next!.value), "syncId");
   }));

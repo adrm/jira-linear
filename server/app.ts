@@ -5,6 +5,8 @@ import { applyMutation, MutationError } from "./mutate.ts";
 import { issueActivity } from "./activity.ts";
 import { projectHistory } from "./history.ts";
 import { reconcile, syncOnce } from "./sync.ts";
+import type { InboxAction } from "../shared/inbox.ts";
+import { validateRules } from "./inbox_rules.ts";
 import type { FieldIds } from "./fields.ts";
 import type { Settings } from "./settings.ts";
 import { discoverWorkflow, type WorkflowConfig } from "./workflow.ts";
@@ -31,6 +33,7 @@ const OPS = new Set([
   "setStatus", "setAssignee", "setPriority", "setLabels", "setType", "setSummary", "setDescription", "addLink", "unlink",
   "setDueDate", "setParent", "addComment", "createIssue", "link",
 ]);
+const INBOX_ACTIONS = new Set<string>(["read", "unread", "archive", "unarchive", "delete"] satisfies InboxAction[]);
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const MIME: Record<string, string> = {
   html: "text/html; charset=utf-8", js: "text/javascript", css: "text/css", svg: "image/svg+xml",
@@ -220,6 +223,40 @@ export function createApp(opts: AppOptions) {
         }
         if (typeof body.marked !== "boolean") return json({ error: "marked must be true or false" }, 400);
         store.setReviewMarks(keys as string[], body.marked);
+        return json({ ok: true });
+      }
+    }
+    if (pathname === "/api/inbox/rules") {
+      if (req.method === "GET") return json(store.inboxRules());
+      if (req.method === "PUT") {
+        let body: unknown;
+        try {
+          body = await req.json();
+        } catch {
+          return json({ error: "Invalid JSON" }, 400);
+        }
+        const rules = validateRules(body);
+        if (!rules) return json({ error: "Invalid inbox rules" }, 400);
+        store.setInboxRules(rules);
+        return json(rules);
+      }
+    }
+    if (pathname === "/api/inbox") {
+      if (req.method === "GET") return json(store.inbox());
+      if (req.method === "POST") {
+        let body: { keys?: unknown; action?: unknown };
+        try {
+          body = await req.json();
+        } catch {
+          return json({ error: "Invalid JSON" }, 400);
+        }
+        const keys = body.keys;
+        if (!Array.isArray(keys) || keys.length === 0 || keys.length > 500 || !keys.every((k) => typeof k === "string" && keyOk(k))) {
+          return json({ error: `keys must be 1-500 ${project} keys` }, 400);
+        }
+        if (typeof body.action !== "string" || !INBOX_ACTIONS.has(body.action)) return json({ error: "Unknown action" }, 400);
+        store.applyInboxAction(keys as string[], body.action as InboxAction);
+        notify();
         return json({ ok: true });
       }
     }
