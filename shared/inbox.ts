@@ -17,6 +17,8 @@ export interface InboxEvent {
   excerpt?: string;
   mentionsMe?: boolean;
   assignment?: "to-me" | "from-me";
+  /** set by the server when it stores the event; unseen events are the ones detected after the entry's `readAt` */
+  detectedAt?: string;
 }
 
 export type InboxState = "unread" | "read" | "archived";

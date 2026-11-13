@@ -1,6 +1,7 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import { openStore } from "./db.ts";
 import type { Comment, Issue } from "../shared/types.ts";
+import { DEFAULT_RULES, type InboxEvent } from "../shared/inbox.ts";
 
 function issue(key: string, over: Partial<Issue> = {}): Issue {
   return {
@@ -185,4 +186,123 @@ Deno.test("opening a mirror made by an older version forces a full re-sync, so n
   } finally {
     Deno.removeSync(path);
   }
+});
+
+function ev(id: string, key: string, at: string, over: Partial<InboxEvent> = {}): InboxEvent {
+  return { id, key, kind: "status", at, author: { id: "ana", name: "Ana" }, from: "To Do", to: "In Review", ...over };
+}
+
+Deno.test("inbox: a first event creates one unread entry with the event", () => {
+  const s = openStore(":memory:");
+  assertEquals(s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]), 1);
+  const [entry, ...rest] = s.inbox();
+  assertEquals(rest.length, 0);
+  assertEquals([entry.key, entry.state, entry.readAt, entry.updatedAt], ["ABC-1", "unread", null, "2026-11-13T10:00:00.000Z"]);
+  assertEquals(entry.events.map((e) => e.id), ["e1"]);
+  assertEquals(typeof entry.events[0].detectedAt, "string");
+});
+
+Deno.test("inbox: more events on an unread entry join it and move it up, never a second entry", () => {
+  const s = openStore(":memory:");
+  s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z"), ev("e2", "ABC-2", "2026-11-13T10:05:00.000Z")]);
+  s.addInboxEvents([ev("e3", "ABC-1", "2026-11-13T10:10:00.000Z", { kind: "comment" })]);
+  const entries = s.inbox();
+  assertEquals(entries.map((e) => e.key), ["ABC-1", "ABC-2"]);
+  assertEquals(entries[0].events.map((e) => e.id), ["e1", "e3"]);
+  assertEquals(entries[0].state, "unread");
+});
+
+Deno.test("inbox: an event already stored, or stored before and since deleted, adds nothing", () => {
+  const s = openStore(":memory:");
+  assertEquals(s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]), 1);
+  assertEquals(s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]), 0);
+  s.applyInboxAction(["ABC-1"], "delete");
+  assertEquals(s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]), 0);
+  assertEquals(s.inbox(), []);
+});
+
+Deno.test("inbox: a read entry becomes unread on a new event and keeps the earlier read mark", () => {
+  const s = openStore(":memory:");
+  s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]);
+  s.applyInboxAction(["ABC-1"], "read");
+  const readAt = s.inbox()[0].readAt;
+  assertEquals(s.inbox()[0].state, "read");
+  assertEquals(typeof readAt, "string");
+  s.addInboxEvents([ev("e2", "ABC-1", "2026-11-13T11:00:00.000Z")]);
+  const [entry] = s.inbox();
+  assertEquals([entry.state, entry.readAt], ["unread", readAt]);
+  assertEquals(entry.events.map((e) => e.id), ["e1", "e2"]);
+});
+
+Deno.test("inbox: reading an entry that is already read or archived changes nothing", () => {
+  const s = openStore(":memory:");
+  s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z"), ev("e2", "ABC-2", "2026-11-13T10:00:00.000Z")]);
+  s.applyInboxAction(["ABC-1"], "read");
+  const before = s.inbox().find((e) => e.key === "ABC-1")!;
+  s.applyInboxAction(["ABC-1"], "read");
+  assertEquals(s.inbox().find((e) => e.key === "ABC-1"), before);
+  s.applyInboxAction(["ABC-2"], "archive");
+  s.applyInboxAction(["ABC-2"], "read");
+  assertEquals(s.inbox().find((e) => e.key === "ABC-2")!.state, "archived");
+});
+
+Deno.test("inbox: an archived entry comes back unread on a new event", () => {
+  const s = openStore(":memory:");
+  s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]);
+  s.applyInboxAction(["ABC-1"], "archive");
+  assertEquals(s.inbox()[0].state, "archived");
+  s.addInboxEvents([ev("e2", "ABC-1", "2026-11-13T11:00:00.000Z")]);
+  assertEquals(s.inbox()[0].state, "unread");
+  s.applyInboxAction(["ABC-1"], "archive");
+  s.applyInboxAction(["ABC-1"], "unarchive");
+  assertEquals(s.inbox()[0].state, "read");
+});
+
+Deno.test("inbox: deleting an entry removes it, and the ticket's next new event starts a fresh entry with only that event", () => {
+  const s = openStore(":memory:");
+  s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]);
+  s.applyInboxAction(["ABC-1"], "delete");
+  assertEquals(s.inbox(), []);
+  s.addInboxEvents([ev("e2", "ABC-1", "2026-11-13T12:00:00.000Z")]);
+  const [entry] = s.inbox();
+  assertEquals([entry.state, entry.readAt, entry.events.map((e) => e.id)], ["unread", null, ["e2"]]);
+});
+
+Deno.test("inbox: marking a read entry unread puts the read mark back so the last batch shows again", () => {
+  const s = openStore(":memory:");
+  s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]);
+  s.applyInboxAction(["ABC-1"], "read");
+  s.applyInboxAction(["ABC-1"], "unread");
+  const [first] = s.inbox();
+  assertEquals([first.state, first.readAt], ["unread", null]);
+  s.applyInboxAction(["ABC-1"], "read");
+  const firstRead = s.inbox()[0].readAt;
+  s.addInboxEvents([ev("e2", "ABC-1", "2026-11-13T11:00:00.000Z")]);
+  s.applyInboxAction(["ABC-1"], "read");
+  s.applyInboxAction(["ABC-1"], "unread");
+  const [again] = s.inbox();
+  assertEquals([again.state, again.readAt], ["unread", firstRead]);
+});
+
+Deno.test("inbox: tombstoning a ticket removes its entry", () => {
+  const s = openStore(":memory:");
+  s.upsertIssue(issue("ABC-1"));
+  s.upsertIssue(issue("ABC-2"));
+  s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z"), ev("e2", "ABC-2", "2026-11-13T10:00:00.000Z")]);
+  s.tombstoneMissing(["ABC-2"]);
+  assertEquals(s.inbox().map((e) => e.key), ["ABC-2"]);
+});
+
+Deno.test("inbox: the install time is recorded once, rules round-trip and default, the watched set is replaced", () => {
+  const s = openStore(":memory:");
+  const installed = s.inboxInstalledAt();
+  assertEquals(s.inboxInstalledAt(), installed);
+  assertEquals(s.inboxRules(), DEFAULT_RULES);
+  const rules = { ...DEFAULT_RULES, scope: "project" as const };
+  s.setInboxRules(rules);
+  assertEquals(s.inboxRules(), rules);
+  s.setWatched(["ABC-1", "ABC-2"]);
+  assertEquals([...s.watched()].sort(), ["ABC-1", "ABC-2"]);
+  s.setWatched(["ABC-3"]);
+  assertEquals([...s.watched()], ["ABC-3"]);
 });
