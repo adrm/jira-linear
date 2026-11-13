@@ -11,6 +11,7 @@ import { applyFilters, type Filter } from "../lib/filters";
 import { buildGroups, displayFor, type Display, type IssueGroup } from "../lib/layout";
 import { buildProjectGroups, DEFAULT_PROJECTS_DISPLAY, groupProjects, listProjects, type ProjectGroup, type ProjectStats, type ProjectsDisplay } from "../lib/projects";
 import { startedFractions } from "../lib/rowdetails";
+import { inboxRows } from "../lib/inbox";
 
 export interface Ctx {
   app: AppStore;
@@ -148,9 +149,14 @@ export function useSidebarProjects(limit = 7) {
 /** Keys in the order they are displayed in the current view (projects or tickets). */
 export function useOrder(): string[] {
   const view = useUi((s) => s.view);
+  const inboxTab = useUi((s) => s.inboxTab);
+  const cursor = useUi((s) => s.selectedKey);
+  const { inbox } = useCtx();
+  const inboxOrder = useMemo(() => (view === "inbox" ? inboxRows(inbox, inboxTab, cursor).map((e) => e.key) : []), [view, inbox, inboxTab, cursor]);
   const tickets = useVisible();
   const projects = useProjects();
   const tab = useUi((s) => s.projectTab);
+  if (view === "inbox") return inboxOrder;
   if (view.startsWith("project:") && tab === "overview") return [];
   return view === "projects" ? projects.order : tickets.order;
 }

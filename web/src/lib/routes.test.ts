@@ -10,6 +10,7 @@ describe("routes", () => {
     ["/mine", route({ view: "mine" })],
     ["/created", route({ view: "created" })],
     ["/review", route({ view: "review" })],
+    ["/inbox", route({ view: "inbox" })],
     ["/all", route({ view: "all" })],
     ["/projects", route({ view: "projects" })],
     ["/projects/ABC-9", route({ view: "project:ABC-9" })],

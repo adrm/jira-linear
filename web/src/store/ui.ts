@@ -1,8 +1,9 @@
 import { createStore } from "zustand/vanilla";
 import type { Filter, FilterField } from "../lib/filters";
 import type { SavedView } from "./settings";
+import type { InboxTab } from "../lib/inbox";
 
-export type View = "active" | "backlog" | "mine" | "created" | "review" | "all" | "projects" | `project:${string}`;
+export type View = "inbox" | "active" | "backlog" | "mine" | "created" | "review" | "all" | "projects" | `project:${string}`;
 export type PickerKind = "status" | "assignee" | "priority" | "labels" | "epic" | "duedate";
 export interface CreateDefaults {
   status?: string;
@@ -80,6 +81,9 @@ export interface UiState {
   projectTab: "overview" | "issues";
   setProjectTab(tab: "overview" | "issues"): void;
   setView(view: View): void;
+  /** which tab of the inbox is showing */
+  inboxTab: InboxTab;
+  setInboxTab(tab: InboxTab): void;
   setSearch(q: string): void;
 }
 
@@ -94,6 +98,7 @@ export function createUiStore() {
   return createStore<UiState>((set, get) => ({
     view: "active",
     projectTab: "overview",
+    inboxTab: "unread",
     search: "",
     selectedKey: null,
     selection: [],
@@ -202,6 +207,7 @@ export function createUiStore() {
       else if (get().search) set({ search: "" });
     },
     setProjectTab: (projectTab) => set({ projectTab, selectedKey: null, selection: [], anchor: null }),
+    setInboxTab: (inboxTab) => set({ inboxTab, selectedKey: null, selection: [], anchor: null }),
     setView: (view) => set({ view, projectTab: "overview", search: "", selectedKey: null, selection: [], anchor: null, activeSavedView: null, detailOpen: false }),
     setSearch: (search) => set({ search }),
   }));

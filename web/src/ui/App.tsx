@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import type { AppStore } from "../store/store";
 import type { UiStore } from "../store/ui";
+import type { InboxEntry } from "@shared/inbox";
 import { applyTheme, createSettingsStore, type SettingsStore } from "../store/settings";
 import { IssuePage } from "./IssuePage";
 import { IssueList } from "./IssueList";
@@ -15,6 +16,7 @@ import { CtxProvider, useCtx, useIssueMap, useOrder, useProjects, useProjectsDis
 import { site } from "../lib/site";
 import { formatPath, parsePath, type Route } from "../lib/routes";
 import { useInbox } from "./useInbox";
+import { Inbox, useReadOnOpen } from "./Inbox";
 
 export interface AppProps {
   app: AppStore;
@@ -109,6 +111,7 @@ export function App(props: AppProps) {
 function Shell() {
   useShortcuts();
   useRouting();
+  useReadOnOpen();
   const detailOpen = useUi((s) => s.detailOpen);
   const view = useUi((s) => s.view);
   const projectTab = useUi((s) => s.projectTab);
@@ -125,7 +128,7 @@ function Shell() {
     <div className={`shell${collapsed ? " is-collapsed" : ""}`}>
       {!collapsed && <Sidebar />}
       <main className={`main${!onPage && view.startsWith("project:") ? " is-project" : ""}`}>
-        {onPage ? <IssuePage /> : (
+        {onPage ? <IssuePage /> : view === "inbox" ? <Inbox /> : (
           <>
             <ViewHeader count={view === "projects" || view.startsWith("project:") ? undefined : total} />
             {view === "projects" ? <ProjectsList /> : (
@@ -271,12 +274,37 @@ function useShortcuts() {
     else ui.getState().openDetail();
   }, opts, [idle]);
   // going places (Linear: G then I / A / B)
+  useHotkeys("g>n", () => ui.getState().setView("inbox"), opts, [idle]);
   useHotkeys("g>i", () => ui.getState().setView("mine"), opts, [idle]);
   useHotkeys("g>a", () => ui.getState().setView("active"), opts, [idle]);
   useHotkeys("g>b", () => ui.getState().setView("backlog"), opts, [idle]);
   useHotkeys("g>t", () => ui.getState().setView("all"), opts, [idle]);
   useHotkeys("g>r", () => ui.getState().setView("review"), opts, [idle]);
   useHotkeys("g>p", () => ui.getState().setView("projects"), opts, [idle]);
+  // the inbox: act on the entry under the cursor
+  const inboxEntry = (): { key: string; state: InboxEntry["state"]; next: string | null } | null => {
+    const { view: v, selectedKey } = ui.getState();
+    const entry = v === "inbox" && selectedKey ? ctx.inbox.find((e) => e.key === selectedKey) : undefined;
+    if (!entry) return null;
+    const at = order.indexOf(entry.key);
+    return { key: entry.key, state: entry.state, next: order[at + 1] ?? order[at - 1] ?? null };
+  };
+  useHotkeys("e", () => {
+    const e = inboxEntry();
+    if (!e) return;
+    ctx.inboxAct([e.key], e.state === "archived" ? "unarchive" : "archive");
+    ui.getState().select(e.next);
+  }, opts, [idle, ctx, order]);
+  useHotkeys("u", () => {
+    const e = inboxEntry();
+    if (e) ctx.inboxAct([e.key], e.state === "unread" ? "read" : "unread");
+  }, opts, [idle, ctx, order]);
+  useHotkeys("delete", () => {
+    const e = inboxEntry();
+    if (!e) return;
+    ctx.inboxAct([e.key], "delete");
+    ui.getState().select(e.next);
+  }, opts, [idle, ctx, order]);
   // acting on the highlighted row or the selection
   useHotkeys("s", () => runAction(ctx, "status"), opts, [idle, ctx]);
   useHotkeys("a", () => runAction(ctx, "assignee"), opts, [idle, ctx]);

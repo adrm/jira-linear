@@ -548,3 +548,27 @@ button.side-row:hover { background: var(--hover); }
 .info-wrap { position: relative; display: inline-flex; }
 .info-tip { position: absolute; z-index: 20; top: calc(100% + 6px); left: -8px; width: 270px; padding: 10px 12px; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--text); background: var(--raise); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.14); }
 .info-tip p { margin: 0 0 6px; } .info-tip p:last-child { margin: 0; }
+
+/* Inbox */
+.inbox { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); flex: 1; min-height: 0; }
+.inbox-list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.inbox-rows { overflow-y: auto; flex: 1; }
+.inbox-row { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.inbox-row:hover { background: var(--hover); }
+.inbox-row.is-selected { background: var(--accent-soft); }
+.inbox-dot { flex: none; width: 7px; height: 7px; margin-top: 7px; border-radius: 50%; border: 1px solid var(--muted); }
+.inbox-row.is-unread .inbox-dot { background: var(--accent); border-color: var(--accent); }
+.inbox-row-body { min-width: 0; flex: 1; }
+.inbox-row-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.inbox-row.is-unread .inbox-title { font-weight: 500; }
+.inbox-key { flex: none; font-weight: 600; }
+.inbox-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-row-sum { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 12.5px; }
+.inbox-row-sum span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.inbox-pane .issue-page { flex: 1; min-height: 0; }
+.inbox-empty { padding: 28px 18px; }
+.inbox-since { flex: none; margin: 12px 16px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); }
+.inbox-since h2 { font-size: 12px; font-weight: 600; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.inbox-since ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.inbox-since li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }

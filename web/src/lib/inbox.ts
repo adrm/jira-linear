@@ -25,3 +25,28 @@ export function summarizeEvents(events: InboxEvent[]): string {
 }
 
 export const unreadCount = (entries: InboxEntry[]): number => entries.filter((e) => e.state === "unread").length;
+
+export type InboxTab = "unread" | "all" | "archived";
+
+/** The events of an entry the owner has not looked at yet: those detected after the last read mark. */
+export function unseenEvents(entry: InboxEntry): InboxEvent[] {
+  if (!entry.readAt) return entry.events;
+  const mark = Date.parse(entry.readAt);
+  return entry.events.filter((e) => Date.parse(e.detectedAt ?? e.at) > mark);
+}
+
+/** One event as a sentence for the "since your last visit" list. */
+export function describeEvent(e: InboxEvent): string {
+  if (e.kind === "comment") return `${e.mentionsMe ? "Mentioned you" : "Commented"}${e.excerpt ? `: “${e.excerpt}”` : ""}`;
+  return summarizeEvents([e]);
+}
+
+/**
+ * The entries a tab lists, in the order given. On the unread tab the entry under the cursor stays even once read,
+ * so a row does not vanish from under the owner as they open it.
+ */
+export function inboxRows(entries: InboxEntry[], tab: InboxTab, keep: string | null): InboxEntry[] {
+  if (tab === "archived") return entries.filter((e) => e.state === "archived");
+  if (tab === "all") return entries.filter((e) => e.state !== "archived");
+  return entries.filter((e) => e.state === "unread" || (e.state === "read" && e.key === keep));
+}

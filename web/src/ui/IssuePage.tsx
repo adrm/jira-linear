@@ -20,7 +20,8 @@ import { site } from "../lib/site";
 const VIEW_LABELS: Record<string, string> = { mine: "My issues", active: "Active", backlog: "Backlog", all: "All issues", projects: "Projects" };
 const RELATION_LABEL: Record<RelKind, string> = { blockedBy: "Blocked by", blocks: "Blocking", relates: "Related" };
 
-export function IssuePage() {
+/** The ticket page. `embedded` is the pane beside a list (the Inbox): no way back or breadcrumb, the list is the context. */
+export function IssuePage({ embedded = false }: { embedded?: boolean } = {}) {
   const { ui, app, jiraUrl, openExternal, copyText, fetchFn, review, setReview } = useCtx();
   const defaultPoints = useDefaultPoints();
   const key = useUi((s) => s.selectedKey);
@@ -64,21 +65,25 @@ export function IssuePage() {
   return (
     <div className="issue-page">
       <header className="viewhead issue-head">
-        <ShowSidebar />
-        <button type="button" className="icon-btn" aria-label="Back" title="Back  Esc" onClick={back}><ArrowLeft size={16} /></button>
-        <nav aria-label="Breadcrumb" className="crumb-trail">
-          <button type="button" onClick={back}>{site.name}</button>
-          <span className="sep" aria-hidden="true">›</span>
-          <button type="button" onClick={back}>{viewLabel}</button>
-          <span className="sep" aria-hidden="true">›</span>
-          {project && view !== `project:${project.key}` && (
-            <>
-              <button type="button" onClick={() => ui.getState().setView(`project:${project.key}`)}>{stripPermanent(project.summary)}</button>
+        {embedded ? <span className="crumb-here"><JiraKey issueKey={issue.key} current /></span> : (
+          <>
+            <ShowSidebar />
+            <button type="button" className="icon-btn" aria-label="Back" title="Back  Esc" onClick={back}><ArrowLeft size={16} /></button>
+            <nav aria-label="Breadcrumb" className="crumb-trail">
+              <button type="button" onClick={back}>{site.name}</button>
               <span className="sep" aria-hidden="true">›</span>
-            </>
-          )}
-          <span className="crumb-here"><JiraKey issueKey={issue.key} current /></span>
-        </nav>
+              <button type="button" onClick={back}>{viewLabel}</button>
+              <span className="sep" aria-hidden="true">›</span>
+              {project && view !== `project:${project.key}` && (
+                <>
+                  <button type="button" onClick={() => ui.getState().setView(`project:${project.key}`)}>{stripPermanent(project.summary)}</button>
+                  <span className="sep" aria-hidden="true">›</span>
+                </>
+              )}
+              <span className="crumb-here"><JiraKey issueKey={issue.key} current /></span>
+            </nav>
+          </>
+        )}
         <div className="viewtools">
           {idx >= 0 && <span className="muted pager">{idx + 1} of {order.length}</span>}
           <button type="button" className="icon-btn" aria-label="Previous issue" title="Previous  K" disabled={idx <= 0} onClick={() => go(-1)}><ChevronUp size={16} /></button>

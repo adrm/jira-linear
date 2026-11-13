@@ -8,7 +8,7 @@ export interface Route {
   savedView: string | null;
 }
 
-const LISTS = ["backlog", "mine", "created", "review", "all", "projects"] as const;
+const LISTS = ["inbox", "backlog", "mine", "created", "review", "all", "projects"] as const;
 const HOME: Route = { view: "active", tab: "overview", issue: null, savedView: null };
 
 /** `/`, `/backlog`, `/projects/KEY`, `/projects/KEY/issues`, `/issue/KEY`, `/views/ID`; anything else is home. */

@@ -1,9 +1,10 @@
 import { useEffect } from "react";
-import { Settings as SettingsIcon, Box, ChevronDown, Flag, ListFilter, SlidersHorizontal, CircleDashed, CircleDot, Layers, PanelLeft, PanelLeftClose, Plus, Search, Star, UserRound, X } from "lucide-react";
+import { Settings as SettingsIcon, Box, ChevronDown, Flag, ListFilter, SlidersHorizontal, CircleDashed, CircleDot, Inbox as InboxIcon, Layers, PanelLeft, PanelLeftClose, Plus, Search, Star, UserRound, X } from "lucide-react";
 import { ACTIONS, runAction } from "./actions";
 import type { View } from "../store/ui";
 import { useSidebarProjects, useApp, useCtx, useFilters, useIssueMap, useProjects, useSettings, useUi } from "./context";
 import { site } from "../lib/site";
+import { unreadCount } from "../lib/inbox";
 
 function NavItem({ icon, label, keys, active, onClick, trailing }: {
   icon: React.ReactNode; label: string; keys?: string; active: boolean; onClick: () => void; trailing?: React.ReactNode;
@@ -43,7 +44,8 @@ function ProjectRing({ pct }: { pct: number }) {
 }
 
 export function Sidebar() {
-  const { ui, settings, review } = useCtx();
+  const { ui, settings, review, inbox } = useCtx();
+  const unread = unreadCount(inbox);
   const issues = useIssueMap();
   const reviewCount = Object.keys(review).filter((k) => issues[k] && issues[k].issuetype !== "Epic").length;
   const view = useUi((s) => s.view);
@@ -63,6 +65,7 @@ export function Sidebar() {
         <button type="button" className="icon-btn" aria-label="Hide sidebar" title="Hide sidebar  ⌘." onClick={() => settings.getState().toggleSidebar()}><PanelLeftClose size={16} /></button>
         </span>
       </div>
+      <NavItem icon={<InboxIcon size={15} />} label="Inbox" keys="G N" active={view === "inbox"} onClick={() => go("inbox")} trailing={unread > 0 ? <span className="nav-pct">{unread}</span> : undefined} />
       <NavItem icon={icon(<UserRound size={15} />)} label="My issues" keys="G I" active={view === "mine" || view === "created"} onClick={() => go("mine")} />
       <Section id="workspace" title="Workspace">
         <NavItem icon={<Box size={15} />} label="Projects" keys="G P" active={view === "projects"} onClick={() => go("projects")} />
