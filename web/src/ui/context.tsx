@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useStore } from "zustand";
 import type { Issue } from "@shared/types";
+import type { InboxAction, InboxEntry } from "@shared/inbox";
 import type { AppState, AppStore, } from "../store/store";
 import { viewIssues } from "../store/store";
 import { targetsOf, type UiState, type UiStore } from "../store/ui";
@@ -19,6 +20,9 @@ export interface Ctx {
   /** tickets marked for team review (key -> when). Stored on this computer only, never in Jira. */
   review: Record<string, string>;
   setReview: (keys: string[], marked: boolean) => void;
+  /** the inbox as the server holds it; actions apply here at once and are sent in the background */
+  inbox: InboxEntry[];
+  inboxAct: (keys: string[], action: InboxAction) => void;
   jiraUrl: string;
   openExternal: (url: string) => void;
   copyText: (text: string) => Promise<void>;

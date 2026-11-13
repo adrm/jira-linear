@@ -14,6 +14,7 @@ import { isEpic } from "../lib/projects";
 import { CtxProvider, useCtx, useIssueMap, useOrder, useProjects, useProjectsDisplay, useSettings, useUi, useVisible, type Ctx } from "./context";
 import { site } from "../lib/site";
 import { formatPath, parsePath, type Route } from "../lib/routes";
+import { useInbox } from "./useInbox";
 
 export interface AppProps {
   app: AppStore;
@@ -36,6 +37,8 @@ export function App(props: AppProps) {
   const [review, setReviewState] = useState<Ctx["review"]>({});
   const reviewRef = useRef(review);
   reviewRef.current = review;
+
+  const { inbox, inboxAct, refreshInbox } = useInbox(fetchFn, (text) => app.getState().notify(text));
 
   const refreshReview = () => {
     fetchFn("/api/review").then((r) => (r.ok ? r.json() : [])).then((rows: Array<{ key: string; markedAt: string }>) => setReviewState(Object.fromEntries(rows.map((r) => [r.key, r.markedAt])))).catch(() => {});
@@ -74,14 +77,14 @@ export function App(props: AppProps) {
     let es: EventSource | undefined;
     if (typeof EventSource !== "undefined") {
       es = new EventSource("/api/events");
-      es.onmessage = () => void app.getState().sync();
+      es.onmessage = () => { void app.getState().sync(); refreshInbox(); };
     }
     // The server only asks Jira every few minutes; coming back to the tab is when you want it current.
     let lastCheck = 0;
     const onVisible = () => {
       if (document.visibilityState !== "visible" || Date.now() - lastCheck < 60_000) return;
       lastCheck = Date.now();
-      fetchFn("/api/sync", { method: "POST" }).catch(() => {}).finally(() => void app.getState().sync());
+      fetchFn("/api/sync", { method: "POST" }).catch(() => {}).finally(() => { void app.getState().sync(); refreshInbox(); });
     };
     document.addEventListener("visibilitychange", onVisible);
     const poll = props.pollMs ?? 15_000;
@@ -91,7 +94,7 @@ export function App(props: AppProps) {
   }, [app]);
 
   const value: Ctx = {
-    app, ui, me, settings, fetchFn, review, setReview,
+    app, ui, me, settings, fetchFn, review, setReview, inbox, inboxAct,
     jiraUrl: props.jiraUrl ?? site.jiraUrl,
     openExternal: props.openExternal ?? ((u) => void window.open(u, "_blank", "noopener")),
     copyText: props.copyText ?? ((t) => navigator.clipboard.writeText(t)),

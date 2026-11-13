@@ -1,4 +1,5 @@
 import type { Comment, Delta, Issue, Mutation } from "@shared/types";
+import type { InboxAction, InboxEntry } from "@shared/inbox";
 
 export const mkIssue = (key: string, over: Partial<Issue> = {}): Issue => ({
   key, id: key.replace("ABC-", "1"), project: "ABC", summary: `Summary ${key}`, descriptionAdf: null,
@@ -17,6 +18,11 @@ export class FakeServer {
   /** local "for review" marks: key -> markedAt */
   review = new Map<string, string>();
   reviewFail = false;
+  /** inbox entries as the server holds them, and whether saving an inbox action fails */
+  inbox: InboxEntry[] = [];
+  inboxFail = false;
+  /** every inbox action received, in order */
+  inboxActions: Array<{ keys: string[]; action: InboxAction }> = [];
   /** how many times the app asked the server to check Jira right now */
   jiraSyncs = 0;
   failNext: Array<{ status: number; error: string }> = [];
@@ -74,6 +80,21 @@ export class FakeServer {
         canceled: r.statusCategory === "done" && r.resolution === "Won't Do" ? day(8 + i) : null,
         points: r.storyPoints,
       })));
+    }
+    if (url.pathname === "/api/inbox") {
+      if (init?.method === "POST") {
+        if (this.inboxFail) return json({ error: "Could not save" }, 500);
+        const b = JSON.parse(String(init.body)) as { keys: string[]; action: InboxAction };
+        this.inboxActions.push(b);
+        this.inbox = this.inbox.flatMap((e) => {
+          if (!b.keys.includes(e.key)) return [e];
+          if (b.action === "delete") return [];
+          const state = { read: "read", unread: "unread", archive: "archived", unarchive: "read" }[b.action] as InboxEntry["state"];
+          return [{ ...e, state, readAt: b.action === "read" ? new Date().toISOString() : e.readAt }];
+        });
+        return json({ ok: true });
+      }
+      return json(this.inbox);
     }
     if (url.pathname === "/api/review") {
       if (init?.method === "POST") {
