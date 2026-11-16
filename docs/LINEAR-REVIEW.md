@@ -15,6 +15,7 @@
 | Descriptions | Rich editor | Rendered from Jira's format; editable as Markdown only when the description converts without loss |
 | Relations | `M` then a key | Add and remove from the issue page and the command menu |
 | `M` | Relation shortcuts | Comment |
+| Inbox | Notifications for what you follow | Built from Jira's change history and comments while the server syncs (every few minutes, not instant), filtered by rules in Settings; one row per ticket; read, archive and delete are local |
 | Review | Not present | `T` marks tickets for a "For review" view; stored locally, never written to Jira |
 
 ## Not built
@@ -26,7 +27,7 @@
 - Project start date, icon and colour
 - Documents as project resources
 - Cycles
-- Inbox, and the Subscribed and Activity tabs of My issues
+- Subscribed and Activity tabs of My issues
 - Manual ordering and `⌥↑`/`⌥↓`
 - Workspace switcher
 - Multiple Jira projects in one view

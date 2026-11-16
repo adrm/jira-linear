@@ -572,3 +572,6 @@ button.side-row:hover { background: var(--hover); }
 .inbox-since h2 { font-size: 12px; font-weight: 600; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .inbox-since ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .inbox-since li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.inbox-rules { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.dlg-subtitle { font-size: 13px; font-weight: 600; margin: 0; }
+.rule-list { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; padding-left: 12px; }

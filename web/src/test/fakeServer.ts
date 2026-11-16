@@ -1,5 +1,5 @@
 import type { Comment, Delta, Issue, Mutation } from "@shared/types";
-import type { InboxAction, InboxEntry } from "@shared/inbox";
+import { DEFAULT_RULES, type InboxAction, type InboxEntry, type InboxRules } from "@shared/inbox";
 
 export const mkIssue = (key: string, over: Partial<Issue> = {}): Issue => ({
   key, id: key.replace("ABC-", "1"), project: "ABC", summary: `Summary ${key}`, descriptionAdf: null,
@@ -21,6 +21,9 @@ export class FakeServer {
   /** inbox entries as the server holds them, and whether saving an inbox action fails */
   inbox: InboxEntry[] = [];
   inboxFail = false;
+  /** the notification rules as the server holds them, and whether saving them fails */
+  rules: InboxRules = structuredClone(DEFAULT_RULES);
+  rulesFail = false;
   /** every inbox action received, in order */
   inboxActions: Array<{ keys: string[]; action: InboxAction }> = [];
   /** how many times the app asked the server to check Jira right now */
@@ -80,6 +83,14 @@ export class FakeServer {
         canceled: r.statusCategory === "done" && r.resolution === "Won't Do" ? day(8 + i) : null,
         points: r.storyPoints,
       })));
+    }
+    if (url.pathname === "/api/inbox/rules") {
+      if (init?.method === "PUT") {
+        if (this.rulesFail) return json({ error: "Could not save" }, 500);
+        this.rules = JSON.parse(String(init.body)) as InboxRules;
+        return json(this.rules);
+      }
+      return json(this.rules);
     }
     if (url.pathname === "/api/inbox") {
       if (init?.method === "POST") {

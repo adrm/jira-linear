@@ -1,23 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { Contrast, Density, Theme } from "../store/settings";
 import { useCtx, useDefaultPoints, useSettings } from "./context";
+import { Choice } from "./Choice";
+import { InboxRules } from "./InboxRules";
 
 const THEMES: [Theme, string][] = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
 const CONTRASTS: [Contrast, string][] = [["normal", "Normal"], ["high", "High"]];
 const DENSITIES: [Density, string][] = [["comfortable", "Comfortable"], ["compact", "Compact"]];
-
-function Choice<T extends string>({ label, options, value, onPick }: { label: string; options: [T, string][]; value: T; onPick(v: T): void }) {
-  return (
-    <div className="set-row">
-      <span>{label}</span>
-      <div className="seg" role="group" aria-label={label}>
-        {options.map(([id, text]) => (
-          <button key={id} type="button" aria-pressed={value === id} onClick={() => onPick(id)}>{text}</button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /** App-wide settings. They apply to every project and are remembered in this browser. */
 export function SettingsDialog() {
@@ -49,6 +38,7 @@ export function SettingsDialog() {
           />
         </label>
         <p className="muted">Used for progress, the chart and the forecast in every project, for tickets that have no Story Points in Jira.</p>
+        <InboxRules />
         <div className="form-actions">
           <button type="button" className="btn btn-primary" onClick={() => ui.getState().closeOverlay()}>Done</button>
         </div>
