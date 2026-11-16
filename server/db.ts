@@ -7,8 +7,6 @@ export interface Store {
   upsertIssue(issue: Issue): boolean;
   upsertComment(comment: Comment): boolean;
   replaceComments(issueKey: string, comments: Comment[]): void;
-  /** whether the issue is in the mirror at all (a tombstoned one still is) */
-  hasIssue(key: string): boolean;
   /** the live comments of one issue as last synced */
   commentsOf(issueKey: string): Comment[];
   tombstoneMissing(liveKeys: string[]): number;
@@ -16,18 +14,23 @@ export interface Store {
   /** tickets marked for team review; lives only in this local database, never in Jira */
   reviewMarks(): Array<{ key: string; markedAt: string }>;
   setReviewMarks(keys: string[], marked: boolean): void;
-  /** Stores events not seen before and applies the entry lifecycle; returns how many were new. */
-  addInboxEvents(events: InboxEvent[]): number;
-  /** every entry, most recently updated first, each with its events oldest first */
+  /**
+   * Takes in events not seen before and applies the entry lifecycle; returns how many became part of the inbox.
+   * Every new event is remembered as seen, also those `deliver` turns down, so it can never arrive later.
+   */
+  addInboxEvents(events: InboxEvent[], deliver?: (e: InboxEvent) => boolean): number;
+  /** remembers event ids as seen without making them events */
+  markInboxSeen(ids: string[]): void;
+  /**
+   * every entry, most recently updated first. Events are those still of interest: for an unread entry the ones detected
+   * after its read mark, for a read or archived one the batch it was last unread for; older ones stay in the database.
+   */
   inbox(): InboxEntry[];
   applyInboxAction(keys: string[], action: InboxAction): void;
   inboxRules(): InboxRules;
   setInboxRules(rules: InboxRules): void;
   /** when the inbox started recording; fixed by the first call */
   inboxInstalledAt(): string;
-  /** tickets the owner watches in Jira, as last read from Jira */
-  watched(): ReadonlySet<string>;
-  setWatched(keys: string[]): void;
   /** status name -> category, for the live issues */
   statusCategories(): Record<string, string>;
   getKv(key: string): string | null;
@@ -56,7 +59,6 @@ CREATE TABLE IF NOT EXISTS inbox_entry (
 CREATE TABLE IF NOT EXISTS inbox_event (id TEXT PRIMARY KEY, key TEXT NOT NULL, at TEXT NOT NULL, data TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS inbox_event_key ON inbox_event(key);
 CREATE TABLE IF NOT EXISTS inbox_seen (id TEXT PRIMARY KEY);
-CREATE TABLE IF NOT EXISTS inbox_watch (key TEXT PRIMARY KEY);
 `;
 
 /** Bump when synced data gains fields, so an existing mirror is fetched again in full. */
@@ -142,13 +144,14 @@ export function openStore(path: string): Store {
     db.prepare("DELETE FROM inbox_entry WHERE key = ?").run(key);
   };
 
-  const addInboxEvents = (events: InboxEvent[]): number =>
+  const addInboxEvents = (events: InboxEvent[], deliver: (e: InboxEvent) => boolean = () => true): number =>
     tx(() => {
       const now = new Date().toISOString();
       let added = 0;
       for (const e of events) {
         if (db.prepare("SELECT 1 FROM inbox_seen WHERE id = ?").get(e.id)) continue;
         db.prepare("INSERT INTO inbox_seen(id) VALUES(?)").run(e.id);
+        if (!deliver(e)) continue;
         db.prepare("INSERT INTO inbox_event(id, key, at, data) VALUES(?, ?, ?, ?)").run(e.id, e.key, e.at, JSON.stringify({ ...e, detectedAt: now }));
         const row = db.prepare("SELECT updated_at FROM inbox_entry WHERE key = ?").get(e.key) as { updated_at: string } | undefined;
         if (!row) {
@@ -196,7 +199,6 @@ export function openStore(path: string): Store {
         for (const c of comments) upsertComment(c);
       });
     },
-    hasIssue: (key) => db.prepare("SELECT 1 FROM issue WHERE key = ?").get(key) !== undefined,
     commentsOf(issueKey) {
       return (db.prepare("SELECT data FROM comment WHERE issue_key = ? AND deleted = 0 ORDER BY id").all(issueKey) as Array<{ data: string }>)
         .map((r) => JSON.parse(r.data) as Comment);
@@ -242,13 +244,26 @@ export function openStore(path: string): Store {
     },
     addInboxEvents,
     inbox() {
-      const entries = db.prepare("SELECT key, state, updated_at, read_at FROM inbox_entry ORDER BY updated_at DESC, key ASC").all() as Array<
-        { key: string; state: InboxState; updated_at: string; read_at: string | null }
+      const entries = db.prepare("SELECT key, state, updated_at, read_at, prev_read_at FROM inbox_entry ORDER BY updated_at DESC, key ASC").all() as Array<
+        { key: string; state: InboxState; updated_at: string; read_at: string | null; prev_read_at: string | null }
       >;
-      const events = db.prepare("SELECT key, data FROM inbox_event ORDER BY at ASC, id ASC").all() as Array<{ key: string; data: string }>;
+      const rows = db.prepare("SELECT key, data FROM inbox_event ORDER BY at ASC, id ASC").all() as Array<{ key: string; data: string }>;
       const byKey = new Map<string, InboxEvent[]>();
-      for (const r of events) byKey.set(r.key, [...(byKey.get(r.key) ?? []), JSON.parse(r.data) as InboxEvent]);
-      return entries.map((r) => ({ key: r.key, state: r.state, updatedAt: r.updated_at, readAt: r.read_at, events: byKey.get(r.key) ?? [] }));
+      for (const r of rows) {
+        const list = byKey.get(r.key);
+        if (list) list.push(JSON.parse(r.data) as InboxEvent);
+        else byKey.set(r.key, [JSON.parse(r.data) as InboxEvent]);
+      }
+      return entries.map((r) => {
+        const mark = r.state === "unread" ? r.read_at : r.prev_read_at;
+        const events = (byKey.get(r.key) ?? []).filter((e) => !mark || Date.parse(e.detectedAt ?? e.at) > Date.parse(mark));
+        return { key: r.key, state: r.state, updatedAt: r.updated_at, readAt: r.read_at, events };
+      });
+    },
+    markInboxSeen(ids) {
+      tx(() => {
+        for (const id of ids) db.prepare("INSERT OR IGNORE INTO inbox_seen(id) VALUES(?)").run(id);
+      });
     },
     applyInboxAction(keys, action) {
       for (const key of keys) {
@@ -270,13 +285,6 @@ export function openStore(path: string): Store {
       const now = new Date().toISOString();
       setKv("inbox_installed_at", now);
       return now;
-    },
-    watched: () => new Set((db.prepare("SELECT key FROM inbox_watch").all() as Array<{ key: string }>).map((r) => r.key)),
-    setWatched(keys) {
-      tx(() => {
-        db.prepare("DELETE FROM inbox_watch").run();
-        for (const k of keys) db.prepare("INSERT OR IGNORE INTO inbox_watch(key) VALUES(?)").run(k);
-      });
     },
     statusCategories() {
       const out: Record<string, string> = {};

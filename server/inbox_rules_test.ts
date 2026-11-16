@@ -75,15 +75,14 @@ Deno.test("field changes are dropped by default and delivered when their flag is
   assertEquals(notify(ev, rules({ scope: "involved", fields: { ...DEFAULT_RULES.fields, priority: true } }), false), false);
 });
 
-Deno.test("isInvolved is true for assignee, reporter, QA assignee, watcher and comment key, and false otherwise", () => {
-  const none = new Set<string>();
-  assertEquals(isInvolved(issue(), ME, none, none), false);
-  assertEquals(isInvolved(issue({ assignee: { id: ME, name: "Me" } }), ME, none, none), true);
-  assertEquals(isInvolved(issue({ reporter: { id: ME, name: "Me" } }), ME, none, none), true);
-  assertEquals(isInvolved(issue({ qaAssignees: [{ id: "x", name: "X" }, { id: ME, name: "Me" }] }), ME, none, none), true);
-  assertEquals(isInvolved(issue(), ME, new Set(["ABC-1"]), none), true);
-  assertEquals(isInvolved(issue(), ME, none, new Set(["ABC-1"])), true);
-  assertEquals(isInvolved(issue({ assignee: { id: "ana", name: "Ana" } }), ME, new Set(["ABC-2"]), new Set(["ABC-3"])), false);
+Deno.test("isInvolved is true for assignee, reporter, QA assignee, watching and commented, and false otherwise", () => {
+  assertEquals(isInvolved(issue(), ME, false, false), false);
+  assertEquals(isInvolved(issue({ assignee: { id: ME, name: "Me" } }), ME, false, false), true);
+  assertEquals(isInvolved(issue({ reporter: { id: ME, name: "Me" } }), ME, false, false), true);
+  assertEquals(isInvolved(issue({ qaAssignees: [{ id: "x", name: "X" }, { id: ME, name: "Me" }] }), ME, false, false), true);
+  assertEquals(isInvolved(issue(), ME, true, false), true);
+  assertEquals(isInvolved(issue(), ME, false, true), true);
+  assertEquals(isInvolved(issue({ assignee: { id: "ana", name: "Ana" } }), ME, false, false), false);
 });
 
 Deno.test("validateRules accepts the defaults and rejects malformed rules", () => {

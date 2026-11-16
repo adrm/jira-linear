@@ -209,7 +209,7 @@ Deno.test("inbox: a watched ticket counts as involved under scope involved, an u
     fake.seed({ key: "ABC-1", watching: true });
     fake.seed({ key: "ABC-2" });
     await syncOnce(inboxDeps(deps));
-    assertEquals([...store.watched()], ["ABC-1"]);
+    assertEquals(fake.requests.some((r) => /watcher/.test((r.body as { jql?: string } | undefined)?.jql ?? "")), false);
     fake.now = "2026-10-15T09:10:00.000+0000";
     for (const key of ["ABC-1", "ABC-2"]) {
       fake.setHistory(key, [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
@@ -219,10 +219,13 @@ Deno.test("inbox: a watched ticket counts as involved under scope involved, an u
     assertEquals(store.inbox().map((e) => e.key), ["ABC-1"]);
     store.setInboxRules({ ...DEFAULT_RULES, scope: "project" });
     fake.now = "2026-10-15T09:20:00.000+0000";
-    fake.setHistory("ABC-2", [{ at: "2026-10-15T09:15:00.000+0000", from: "In Review", to: "Done", author: ANA }]);
+    fake.setHistory("ABC-2", [
+      { at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA },
+      { at: "2026-10-15T09:15:00.000+0000", from: "In Review", to: "Done", author: ANA },
+    ]);
     fake.touch("ABC-2");
     await syncOnce(inboxDeps(deps));
-    assertEquals(store.inbox().map((e) => e.key).sort(), ["ABC-1", "ABC-2"]);
+    assertEquals(store.inbox().map((e) => [e.key, e.events.map((v) => v.to)]).sort(), [["ABC-1", ["In Review"]], ["ABC-2", ["Done"]]]);
   }));
 
 Deno.test("inbox: with status changes off no status event is stored, and the owner's own changes add nothing", () =>
@@ -282,4 +285,66 @@ Deno.test("inbox: a ticket whose embedded history is at Jira's cap gets its full
     await syncOnce(inboxDeps(deps));
     assertEquals(fake.requests.some((r) => r.path.startsWith("/issue/ABC-1/changelog")), true);
     assertEquals(store.inbox()[0].events.length, 100);
+  }));
+
+Deno.test("inbox: a change the rules turned down stays turned down when the rules change and the ticket is read again", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1", assignee: ME });
+    await syncOnce(inboxDeps(deps));
+    store.setInboxRules({ ...DEFAULT_RULES, status: { mode: "off" } });
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    store.setInboxRules(DEFAULT_RULES);
+    await syncOnce(inboxDeps(deps)); // nothing new in Jira; the same ticket comes back through the overlap window
+    assertEquals(store.inbox(), []);
+  }));
+
+Deno.test("inbox: a dropped change on a ticket does not arrive later because the owner became involved in it", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-2" });
+    await syncOnce(inboxDeps(deps));
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-2", [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
+    fake.touch("ABC-2");
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox(), []); // not their ticket yet
+    fake.now = "2026-10-15T09:20:00.000+0000";
+    fake.addCommentDirect("ABC-2", "mine", ME); // commenting makes it theirs
+    fake.touch("ABC-2");
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox(), []);
+  }));
+
+Deno.test("inbox: a new ticket gives its created event even when the sync that first saw it failed afterwards", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-9" });
+    await syncOnce(inboxDeps(deps));
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.seed({ key: "ABC-1", assignee: ME });
+    fake.seed({ key: "ABC-2" });
+    fake.addCommentDirect("ABC-2", "c", ANA);
+    fake.truncateEmbeddedComments = 0; // ABC-2's comments need a second request
+    const failing = { ...inboxDeps(deps), client: { ...deps.client, listComments: () => Promise.reject(new Error("Jira went away")) } };
+    let failed = false;
+    await syncOnce(failing).catch(() => (failed = true));
+    assertEquals(failed, true);
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox().map((e) => [e.key, e.events.map((v) => v.kind)]), [["ABC-1", ["created"]]]);
+  }));
+
+Deno.test("inbox: a ticket created after the install but first seen by a full load does not announce its creation on a later edit", () =>
+  setup(async ({ fake, store, deps }) => {
+    store.setKv("inbox_installed_at", "2026-10-15T08:00:00.000Z");
+    fake.seed({ key: "ABC-1", assignee: ME, created: "2026-10-15T09:00:00.000+0000" });
+    await syncOnce(inboxDeps(deps)); // full
+    fake.now = "2026-10-15T09:10:00.000+0000";
+    fake.setHistory("ABC-1", [{ at: "2026-10-15T09:05:00.000+0000", from: "Backlog", to: "In Review", author: ANA }]);
+    fake.touch("ABC-1");
+    await syncOnce(inboxDeps(deps));
+    assertEquals(store.inbox().map((e) => e.events.map((v) => v.kind)), [["status"]]);
   }));

@@ -81,7 +81,7 @@ The launchd label defaults to `com.jira-linear`; set `serviceLabel` in the setti
 | Change | `S` status, `A` assign, `I` assign to me, `P` priority, `L` labels (the **Type** group is Bug / Spike / Task), `⇧P` project, `⇧D` due date, `R` rename, `M` comment, `T` mark / unmark for team review |
 | Go | `G` then `N` inbox, `I` my issues, `A` active, `B` backlog, `R` for review, `T` all issues, `P` projects |
 | Open | `Enter` (full page), `O` open in Jira, `Y` copy link; on a project page `O`/`Y` act on the epic |
-| Inbox | `J`/`K` move, `E` archive (unarchive on the Archived tab), `U` read / unread, `Delete` delete |
+| Inbox | `J`/`K` move, `E` archive (unarchive on the Archived tab), `U` read / unread, `⌫` or `Delete` delete; each row also has buttons for these |
 | View | `F` filter, `⇧V` display options, `⌘B` list/board, `⌘.` sidebar, `⌘I` project details |
 | General | `C` create, `/` search, `⌘K` command menu (acts on the highlighted ticket or selection), `⌘Z` undo |
 

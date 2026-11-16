@@ -36,7 +36,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "Y", label: "Copy link", group: "Issue" },
   { keys: "E", label: "Archive or unarchive a notification (Inbox)", group: "General" },
   { keys: "U", label: "Mark a notification read or unread (Inbox)", group: "General" },
-  { keys: "Delete", label: "Delete a notification (Inbox)", group: "General" },
+  { keys: "⌫ / Delete", label: "Delete a notification (Inbox)", group: "General" },
   { keys: "⌘ Z", label: "Undo", group: "General" },
   { keys: "C", label: "Create issue", group: "General" },
   { keys: "/", label: "Search", group: "General" },

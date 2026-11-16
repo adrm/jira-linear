@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { InboxEntry, InboxEvent } from "@shared/inbox";
+import { Archive, ArchiveRestore, Mail, MailOpen, Trash2 } from "lucide-react";
+import type { InboxAction, InboxEntry, InboxEvent } from "@shared/inbox";
 import { describeEvent, inboxRows, summarizeEvents, unreadCount, unseenEvents, type InboxTab } from "../lib/inbox";
 import { timeAgo } from "../lib/time";
 import { isEpic } from "../lib/projects";
@@ -24,10 +25,12 @@ export function useReadOnOpen() {
   }, [key, entry, inboxAct]);
 }
 
-function Row({ entry, selected, summary, onOpen }: { entry: InboxEntry; selected: boolean; summary: string; onOpen: () => void }) {
+function Row({ entry, selected, summary, onOpen, onAct }: { entry: InboxEntry; selected: boolean; summary: string; onOpen: () => void; onAct: (action: InboxAction) => void }) {
   const issues = useIssueMap();
   const unread = entry.state === "unread";
+  const archived = entry.state === "archived";
   const author = entry.events[entry.events.length - 1]?.author?.name ?? null;
+  const act = (action: InboxAction) => (e: React.MouseEvent) => { e.stopPropagation(); onAct(action); };
   return (
     <div role="option" aria-selected={selected} data-key={entry.key} className={`inbox-row${selected ? " is-selected" : ""}${unread ? " is-unread" : ""}`} onClick={onOpen}>
       <span className="inbox-dot" aria-hidden="true" />
@@ -39,6 +42,11 @@ function Row({ entry, selected, summary, onOpen }: { entry: InboxEntry; selected
         </div>
         <div className="inbox-row-sum muted">{author && <Avatar name={author} />}{" "}<span>{summary}</span></div>
       </div>
+      <span className="inbox-actions">
+        <button type="button" className="icon-btn" aria-label={archived ? "Unarchive" : "Archive"} title={`${archived ? "Unarchive" : "Archive"}  E`} onClick={act(archived ? "unarchive" : "archive")}>{archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}</button>
+        {!archived && <button type="button" className="icon-btn" aria-label={unread ? "Mark as read" : "Mark as unread"} title={`${unread ? "Mark as read" : "Mark as unread"}  U`} onClick={act(unread ? "read" : "unread")}>{unread ? <MailOpen size={14} /> : <Mail size={14} />}</button>}
+        <button type="button" className="icon-btn" aria-label="Delete" title="Delete  ⌫" onClick={act("delete")}><Trash2 size={14} /></button>
+      </span>
     </div>
   );
 }
@@ -59,7 +67,7 @@ function SinceLastVisit({ events }: { events: InboxEvent[] }) {
 
 /** Every ticket with changes the owner has not dealt with: the list on the left, the ticket itself on the right. */
 export function Inbox() {
-  const { ui, inbox } = useCtx();
+  const { ui, inbox, inboxAct } = useCtx();
   const tab = useUi((s) => s.inboxTab);
   const key = useUi((s) => s.selectedKey);
   const issues = useIssueMap();
@@ -70,7 +78,14 @@ export function Inbox() {
   useEffect(() => {
     if (selected?.state === "unread") setSeen((s) => ({ ...s, [selected.key]: unseenEvents(selected) }));
   }, [selected]);
-  const open = key && issues[key] && !isEpic(issues[key]);
+  const issue = key ? issues[key] : undefined;
+  const rowOrder = rows.map((e) => e.key);
+  const actOn = (entry: InboxEntry, action: InboxAction) => {
+    // A row that leaves the list takes the cursor on to its neighbour.
+    const at = rowOrder.indexOf(entry.key);
+    if (entry.key === key && (action === "archive" || action === "unarchive" || action === "delete")) ui.getState().select(rowOrder[at + 1] ?? rowOrder[at - 1] ?? null);
+    inboxAct([entry.key], action);
+  };
   const unread = unreadCount(inbox);
   return (
     <div className="inbox">
@@ -87,18 +102,20 @@ export function Inbox() {
         <div role="listbox" aria-label="Inbox" className="inbox-rows">
           {rows.map((e) => {
             const unseen = unseenEvents(e);
-            return <Row key={e.key} entry={e} selected={e.key === key} summary={summarizeEvents(unseen.length ? unseen : e.events)} onOpen={() => ui.getState().select(e.key)} />;
+            return <Row key={e.key} entry={e} selected={e.key === key} summary={summarizeEvents(unseen.length ? unseen : e.events)} onOpen={() => ui.getState().select(e.key)} onAct={(action) => actOn(e, action)} />;
           })}
           {rows.length === 0 && <p className="muted inbox-empty">{tab === "unread" ? "You’re all caught up." : tab === "archived" ? "Nothing archived." : "No notifications yet."}</p>}
         </div>
       </section>
       <section className="inbox-pane" aria-label="Notification">
-        {open ? (
-          <>
-            <SinceLastVisit events={seen[key] ?? []} />
-            <IssuePage embedded />
-          </>
-        ) : <p className="muted inbox-empty">Select a notification to see the ticket.</p>}
+        {selected ? <SinceLastVisit events={seen[selected.key] ?? []} /> : null}
+        {issue && isEpic(issue) ? (
+          <div className="inbox-epic">
+            <h2>{issue.summary}</h2>
+            <p className="muted">A project, not a ticket.</p>
+            <button type="button" className="btn" onClick={() => ui.getState().setView(`project:${issue.key}`)}>Open project</button>
+          </div>
+        ) : issue ? <IssuePage embedded /> : <p className="muted inbox-empty">Select a notification to see the ticket.</p>}
       </section>
     </div>
   );

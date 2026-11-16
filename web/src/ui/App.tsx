@@ -299,7 +299,7 @@ function useShortcuts() {
     const e = inboxEntry();
     if (e) ctx.inboxAct([e.key], e.state === "unread" ? "read" : "unread");
   }, opts, [idle, ctx, order]);
-  useHotkeys("delete", () => {
+  useHotkeys("backspace, delete", () => {
     const e = inboxEntry();
     if (!e) return;
     ctx.inboxAct([e.key], "delete");

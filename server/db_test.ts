@@ -221,17 +221,19 @@ Deno.test("inbox: an event already stored, or stored before and since deleted, a
   assertEquals(s.inbox(), []);
 });
 
-Deno.test("inbox: a read entry becomes unread on a new event and keeps the earlier read mark", () => {
+Deno.test("inbox: a read entry becomes unread on a new event and keeps the earlier read mark", async () => {
   const s = openStore(":memory:");
   s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]);
+  await new Promise((r) => setTimeout(r, 5));
   s.applyInboxAction(["ABC-1"], "read");
   const readAt = s.inbox()[0].readAt;
   assertEquals(s.inbox()[0].state, "read");
   assertEquals(typeof readAt, "string");
+  await new Promise((r) => setTimeout(r, 5));
   s.addInboxEvents([ev("e2", "ABC-1", "2026-11-13T11:00:00.000Z")]);
   const [entry] = s.inbox();
   assertEquals([entry.state, entry.readAt], ["unread", readAt]);
-  assertEquals(entry.events.map((e) => e.id), ["e1", "e2"]);
+  assertEquals(entry.events.map((e) => e.id), ["e2"]); // what it was unread for since the read mark
 });
 
 Deno.test("inbox: reading an entry that is already read or archived changes nothing", () => {
@@ -293,7 +295,7 @@ Deno.test("inbox: tombstoning a ticket removes its entry", () => {
   assertEquals(s.inbox().map((e) => e.key), ["ABC-2"]);
 });
 
-Deno.test("inbox: the install time is recorded once, rules round-trip and default, the watched set is replaced", () => {
+Deno.test("inbox: the install time is recorded once, rules round-trip and default", () => {
   const s = openStore(":memory:");
   const installed = s.inboxInstalledAt();
   assertEquals(s.inboxInstalledAt(), installed);
@@ -301,10 +303,6 @@ Deno.test("inbox: the install time is recorded once, rules round-trip and defaul
   const rules = { ...DEFAULT_RULES, scope: "project" as const };
   s.setInboxRules(rules);
   assertEquals(s.inboxRules(), rules);
-  s.setWatched(["ABC-1", "ABC-2"]);
-  assertEquals([...s.watched()].sort(), ["ABC-1", "ABC-2"]);
-  s.setWatched(["ABC-3"]);
-  assertEquals([...s.watched()], ["ABC-3"]);
 });
 
 Deno.test("commentsOf returns the live comments of one issue", () => {
@@ -316,9 +314,35 @@ Deno.test("commentsOf returns the live comments of one issue", () => {
   assertEquals(s.commentsOf("ABC-9"), []);
 });
 
-Deno.test("hasIssue is true for a mirrored issue, also a tombstoned one, and false for an unknown key", () => {
+Deno.test("inbox: events the filter turns down are recorded as seen, so they never arrive later", () => {
   const s = openStore(":memory:");
-  s.upsertIssue(issue("ABC-1"));
-  s.tombstoneMissing(["ABC-9"]);
-  assertEquals([s.hasIssue("ABC-1"), s.hasIssue("ABC-2")], [true, false]);
+  const a = ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z");
+  const b = ev("e2", "ABC-2", "2026-11-13T10:00:00.000Z");
+  assertEquals(s.addInboxEvents([a, b], (e) => e.key === "ABC-2"), 1);
+  assertEquals(s.inbox().map((e) => e.key), ["ABC-2"]);
+  assertEquals(s.addInboxEvents([a]), 0);
+  assertEquals(s.inbox().map((e) => e.key), ["ABC-2"]);
+});
+
+Deno.test("inbox: ids marked seen never become events", () => {
+  const s = openStore(":memory:");
+  s.markInboxSeen(["new:ABC-1"]);
+  assertEquals(s.addInboxEvents([ev("new:ABC-1", "ABC-1", "2026-11-13T10:00:00.000Z", { kind: "created" })]), 0);
+  assertEquals(s.inbox(), []);
+});
+
+Deno.test("inbox: an entry that is not unread lists only the events of its last batch, the unread one all of them", async () => {
+  const pause = () => new Promise((r) => setTimeout(r, 5));
+  const s = openStore(":memory:");
+  s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]);
+  await pause();
+  s.applyInboxAction(["ABC-1"], "read");
+  await pause();
+  s.addInboxEvents([ev("e2", "ABC-1", "2026-11-13T11:00:00.000Z")]);
+  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e2"]); // unread: what arrived after the read mark
+  await pause();
+  s.applyInboxAction(["ABC-1"], "read");
+  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e2"]); // read: the batch it was last unread for
+  s.applyInboxAction(["ABC-1"], "archive");
+  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e2"]);
 });

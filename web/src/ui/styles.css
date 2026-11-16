@@ -575,3 +575,7 @@ button.side-row:hover { background: var(--hover); }
 .inbox-rules { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 .dlg-subtitle { font-size: 13px; font-weight: 600; margin: 0; }
 .rule-list { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; padding-left: 12px; }
+.inbox-actions { flex: none; display: none; align-items: center; gap: 2px; align-self: center; }
+.inbox-row:hover .inbox-actions, .inbox-row.is-selected .inbox-actions { display: flex; }
+.inbox-epic { padding: 28px 24px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.inbox-epic h2 { margin: 0; font-size: 16px; }

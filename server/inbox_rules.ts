@@ -4,9 +4,8 @@ import type { Issue } from "../shared/types.ts";
 const FIELD_KINDS = ["priority", "duedate", "summary", "labels", "type", "parent", "links"] as const;
 
 /** The owner is on the ticket (assignee, reporter, QA assignee, watcher) or has commented on it or been mentioned on it. */
-export function isInvolved(issue: Issue, meId: string, watched: ReadonlySet<string>, commentKeys: ReadonlySet<string>): boolean {
-  return issue.assignee?.id === meId || issue.reporter?.id === meId || issue.qaAssignees.some((u) => u.id === meId) ||
-    watched.has(issue.key) || commentKeys.has(issue.key);
+export function isInvolved(issue: Issue, meId: string, watching: boolean, commented: boolean): boolean {
+  return issue.assignee?.id === meId || issue.reporter?.id === meId || issue.qaAssignees.some((u) => u.id === meId) || watching || commented;
 }
 
 /**

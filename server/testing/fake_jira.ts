@@ -52,7 +52,7 @@ export interface SeedIssue {
   statusChanged?: string | null;
   points?: number | null;
   resolution?: string | null;
-  /** the test user watches this issue (answers `watcher = currentUser()`) */
+  /** the test user watches this issue (reported in the `watches` field) */
   watching?: boolean;
 }
 
@@ -96,7 +96,6 @@ export class FakeJira {
     const raw: Raw = {
       id: String(n),
       key,
-      watching: !!s.watching,
       fields: {
         summary: s.summary ?? `Issue ${key}`,
         description: s.description ?? null,
@@ -123,6 +122,7 @@ export class FakeJira {
         resolution: s.resolution ? { name: s.resolution } : null,
         resolutiondate: null,
         issuelinks: [],
+        watches: { watchCount: s.watching ? 1 : 0, isWatching: !!s.watching },
       },
     };
     this.issues.set(key, raw);
@@ -288,7 +288,6 @@ export class FakeJira {
     let rows = [...this.issues.values()];
     const proj = jql.match(/project\s*=\s*"?([A-Z]+)"?/);
     if (proj) rows = rows.filter((r) => r.key.startsWith(proj[1] + "-"));
-    if (/watcher\s*=\s*currentUser\(\)/.test(jql)) rows = rows.filter((r) => r.watching);
     const par = jql.match(/parent\s*=\s*"?([A-Z]+-\d+)"?/);
     if (par) rows = rows.filter((r) => r.fields.parent?.key === par[1]);
     const upd = jql.match(/updated\s*>=\s*"(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2})"/);

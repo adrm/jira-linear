@@ -121,6 +121,48 @@ describe("Inbox view", () => {
     await waitFor(() => expect(keysShown()).toEqual(["ABC-1"]));
   });
 
+  it("Backspace, the Delete key of a Mac keyboard, removes the entry too", async () => {
+    const { user } = await renderApp();
+    await waitFor(() => expect(keysShown()).toEqual(["ABC-1", "ABC-2"]));
+    await user.click(rowOf("ABC-2"));
+    await user.keyboard("{Backspace}");
+    await waitFor(() => expect(sent(["ABC-2"], "delete")).toBe(true));
+  });
+
+  it("each row has buttons to archive, mark read or unread, and delete, for the mouse", async () => {
+    const { user } = await renderApp();
+    await user.click(await screen.findByRole("tab", { name: /^All/ }));
+    await user.click(within(rowOf("ABC-2")).getByRole("button", { name: "Archive" }));
+    await waitFor(() => expect(sent(["ABC-2"], "archive")).toBe(true));
+    await user.click(within(rowOf("ABC-1")).getByRole("button", { name: "Mark as read" }));
+    await waitFor(() => expect(sent(["ABC-1"], "read")).toBe(true));
+    await user.click(within(rowOf("ABC-3")).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(sent(["ABC-3"], "delete")).toBe(true));
+  });
+
+  it("a read row offers Mark as unread, an archived one Unarchive, and using a button does not open the ticket", async () => {
+    const { user } = await renderApp();
+    await user.click(await screen.findByRole("tab", { name: /^All/ }));
+    await user.click(within(rowOf("ABC-3")).getByRole("button", { name: "Mark as unread" }));
+    await waitFor(() => expect(sent(["ABC-3"], "unread")).toBe(true));
+    expect(screen.queryByRole("region", { name: "Issue detail" })).toBeNull();
+    await user.click(screen.getByRole("tab", { name: /^Archived/ }));
+    await user.click(within(rowOf("ABC-5")).getByRole("button", { name: "Unarchive" }));
+    await waitFor(() => expect(sent(["ABC-5"], "unarchive")).toBe(true));
+  });
+
+  it("an entry for a project (epic) shows what is new and a way into the project, instead of a blank pane", async () => {
+    server.put(mkIssue("ABC-4", { summary: "Quarterly reporting", issuetype: "Epic", updated: "2026-10-01T10:00:00.000+0000" }));
+    server.inbox = [entry("ABC-4", "unread", [event("e9", "ABC-4", { kind: "comment", excerpt: "@Ana please review the scope", mentionsMe: true, at: "2026-11-13T12:00:00.000Z" })])];
+    const { user } = await renderApp();
+    await waitFor(() => expect(keysShown()).toEqual(["ABC-4"]));
+    await user.click(rowOf("ABC-4"));
+    const block = await screen.findByRole("region", { name: "Since your last visit" });
+    expect(within(block).getByText("Mentioned you: “@Ana please review the scope”")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open project" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/projects/ABC-4"));
+  });
+
   it("J moves down the unread entries and a read one leaves the list once you move on", async () => {
     const { user } = await renderApp();
     await waitFor(() => expect(keysShown()).toEqual(["ABC-1", "ABC-2"]));

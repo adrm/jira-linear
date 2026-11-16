@@ -46,7 +46,7 @@ export async function discoverFields(client: { request: <T = any>(m: string, p: 
 export function issueFieldList(f: FieldIds): string[] {
   return [
     "summary", "description", "status", "issuetype", "priority", "assignee", "reporter", "labels", "parent",
-    "created", "updated", "duedate", "issuelinks", "comment", "resolution", "statuscategorychangedate",
+    "created", "updated", "duedate", "issuelinks", "comment", "resolution", "statuscategorychangedate", "watches",
     ...Object.values(f),
   ];
 }

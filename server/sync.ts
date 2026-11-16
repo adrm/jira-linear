@@ -38,14 +38,13 @@ interface InboxRun {
   meId: string;
   installedAt: string;
   rules: InboxRules;
-  watched: ReadonlySet<string>;
 }
 
-async function ingest(deps: SyncDeps, raws: any[], inbox?: InboxRun): Promise<number> {
+/** `inbox` is set on incremental runs; `fullLoad` on the one that first mirrors the project. */
+async function ingest(deps: SyncDeps, raws: any[], inbox?: InboxRun, fullLoad = false): Promise<number> {
   let changed = 0;
   for (const raw of raws) {
     const issue = normalizeIssue(raw, deps.fields);
-    const seenBefore = deps.store.hasIssue(issue.key);
     if (deps.store.upsertIssue(issue)) changed++;
 
     const embedded = raw.fields.comment;
@@ -61,29 +60,26 @@ async function ingest(deps: SyncDeps, raws: any[], inbox?: InboxRun): Promise<nu
       if ((raw.changelog?.histories?.length ?? 0) >= SEARCH_CHANGELOG_CAP) {
         raw.changelog = { histories: await deps.client.getChangelog(issue.key) };
       }
-      // A ticket already in the mirror was not created now, however recent its creation date.
       const events = detectEvents(
         { ...raw, fields: { ...raw.fields, comment: { comments: rawComments } } },
         { commentIds: new Set(mirrored.map((c) => c.id)) },
         inbox.meId,
         inbox.installedAt,
-      ).filter((e) => !(seenBefore && e.kind === "created"));
+      );
       if (events.length) {
         const commented = [...mirrored, ...comments].some((c) => c.author?.id === inbox.meId || mentionsUser(c.bodyAdf, inbox.meId));
-        const involved = isInvolved(issue, inbox.meId, inbox.watched, commented ? new Set([issue.key]) : new Set());
-        deps.store.addInboxEvents(events.filter((e) => shouldNotify(e, issue, inbox.rules, involved, inbox.meId)));
+        const involved = isInvolved(issue, inbox.meId, raw.fields.watches?.isWatching === true, commented);
+        // Every event is remembered as seen, delivered or not: rules and involvement change later, past events do not come back.
+        deps.store.addInboxEvents(events, (e) => shouldNotify(e, issue, inbox.rules, involved, inbox.meId));
       }
     }
+
+    // Tickets met by a full load are not announced as new when they are edited later.
+    if (fullLoad && deps.meId) deps.store.markInboxSeen([`new:${issue.key}`]);
 
     deps.store.replaceComments(issue.key, comments);
   }
   return changed;
-}
-
-/** The tickets the owner watches, kept for the "involved" test. A Jira failure here fails the sync like any other. */
-async function refreshWatched(deps: SyncDeps): Promise<void> {
-  const raws = await deps.client.searchAll(`project = ${deps.project} AND watcher = currentUser()`, ["summary"], deps.pageSize ?? 100);
-  deps.store.setWatched(raws.map((r) => r.key));
 }
 
 export async function syncOnce(deps: SyncDeps): Promise<{ mode: "full" | "incremental"; changed: number }> {
@@ -96,13 +92,12 @@ export async function syncOnce(deps: SyncDeps): Promise<{ mode: "full" | "increm
   let inbox: InboxRun | undefined;
   if (deps.meId) {
     const installedAt = deps.store.inboxInstalledAt();
-    await refreshWatched(deps);
     // A full load is not news: it only records where the inbox starts.
-    if (cursor) inbox = { meId: deps.meId, installedAt, rules: deps.store.inboxRules(), watched: deps.store.watched() };
+    if (cursor) inbox = { meId: deps.meId, installedAt, rules: deps.store.inboxRules() };
   }
 
   const raws = await deps.client.searchAll(jql, issueFieldList(deps.fields), deps.pageSize ?? 100, inbox ? "changelog" : undefined);
-  const changed = await ingest(deps, raws, inbox);
+  const changed = await ingest(deps, raws, inbox, !cursor);
 
   const newest = raws.map((r) => r.fields.updated as string).sort().at(-1);
   if (newest && (!cursor || newest > cursor)) deps.store.setKv("cursor", newest);
