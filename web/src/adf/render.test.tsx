@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { Adf } from "./render";
 
 const doc = (...content: unknown[]) => ({ type: "doc", version: 1, content });
@@ -45,5 +45,48 @@ describe("Adf", () => {
   it("renders nothing for null", () => {
     const { container } = render(<Adf doc={null} />);
     expect(container).toBeEmptyDOMElement();
+  });
+  describe("pictures and attachments", () => {
+    const file = (attrs: Record<string, unknown>) => ({ type: "media", attrs: { type: "file", collection: "", ...attrs } });
+    it("shows a picture from the ticket through the server, linked to the full size", () => {
+      render(<Adf issueKey="ABC-1" doc={doc({ type: "mediaSingle", attrs: { layout: "center", width: 40 }, content: [file({ id: "m 1", alt: "shot.png" })] })} />);
+      const img = screen.getByRole("img", { name: "shot.png" });
+      expect(img).toHaveAttribute("src", "/api/media/ABC-1/m%201?name=shot.png");
+      expect(img.closest("a")).toHaveAttribute("target", "_blank");
+      expect(img.closest("figure")).toHaveStyle({ width: "40%" });
+    });
+    it("falls back to a link with the file name when the picture cannot be loaded", () => {
+      render(<Adf issueKey="ABC-1" doc={doc({ type: "mediaSingle", content: [file({ id: "m1", alt: "doc.pdf" })] })} />);
+      fireEvent.error(screen.getByRole("img", { name: "doc.pdf" }));
+      expect(screen.queryByRole("img")).toBeNull();
+      expect(screen.getByRole("link", { name: "doc.pdf" })).toHaveAttribute("href", "/api/media/ABC-1/m1?name=doc.pdf");
+    });
+    it("lists attachment groups and inline files as links", () => {
+      render(<Adf issueKey="ABC-1" doc={doc({ type: "mediaGroup", content: [file({ id: "a", alt: "a.pdf" }), file({ id: "b" })] }, p({ type: "mediaInline", attrs: { type: "file", id: "c", collection: "" } }))} />);
+      expect(screen.getByRole("link", { name: "a.pdf" })).toBeInTheDocument();
+      expect(screen.getAllByRole("link", { name: "Attachment" })).toHaveLength(2);
+      expect(screen.queryByRole("img")).toBeNull();
+    });
+    it("shows only the name when the ticket is not known, and never loads unsafe addresses", () => {
+      render(<Adf doc={doc({ type: "mediaSingle", content: [file({ id: "m1", alt: "shot.png" })] }, { type: "mediaSingle", content: [{ type: "media", attrs: { type: "external", url: "blob:https://x.test/1", alt: "blob" } }] }, { type: "mediaSingle", content: [{ type: "media", attrs: { type: "external", url: "https://x.test/a.png", alt: "ext" } }] })} />);
+      expect(screen.getByText("shot.png")).toBeInTheDocument();
+      expect(screen.getByText("blob")).toBeInTheDocument();
+      expect(screen.getAllByRole("img")).toHaveLength(1);
+      expect(screen.getByRole("img", { name: "ext" })).toHaveAttribute("src", "https://x.test/a.png");
+    });
+  });
+  it("renders task lists, expands, coloured text and panel types", () => {
+    const { container } = render(<Adf doc={doc(
+      { type: "taskList", content: [{ type: "taskItem", attrs: { state: "DONE" }, content: [t("done")] }, { type: "taskItem", attrs: { state: "TODO" }, content: [t("todo")] }] },
+      { type: "expand", attrs: { title: "More" }, content: [p(t("inside"))] },
+      { type: "panel", attrs: { panelType: "warning" }, content: [p(t("careful"))] },
+      p(t("red", [{ type: "textColor", attrs: { color: "#ff0000" } }]), t("bad", [{ type: "textColor", attrs: { color: "url(x)" } }])),
+    )} />);
+    expect(screen.getByRole("checkbox", { name: "Done" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "To do" })).not.toBeChecked();
+    expect(container.querySelector("details summary")?.textContent).toBe("More");
+    expect(container.querySelector(".adf-panel-warning")).not.toBeNull();
+    expect(screen.getByText("red")).toHaveStyle({ color: "#ff0000" });
+    expect(screen.getByText("bad").tagName).not.toBe("SPAN");
   });
 });

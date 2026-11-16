@@ -61,6 +61,11 @@ export class FakeJira {
   histories = new Map<string, Array<{ at: string; from: string; to: string; field?: string; fromId?: string; toId?: string; author?: { accountId: string; displayName: string } }>>();
   remoteLinks = new Map<string, Raw[]>();
   comments = new Map<string, Raw[]>();
+  /** Files attached to issues; `mediaId` is the id rich text uses for the file. */
+  attachments = new Map<string, Array<{ id: string; filename: string; mimeType: string; bytes: Uint8Array; mediaId: string }>>();
+  /** When set, attachment content URLs redirect somewhere that does not name the file by a media id. */
+  hideMediaIds = false;
+  private attachmentSeq = 9000;
   requests: Array<{ method: string; path: string; body: unknown }> = [];
   /** Queue of failures returned for the next matching requests (any path). */
   failures: Array<{ status: number; body?: unknown; headers?: Record<string, string> }> = [];
@@ -87,6 +92,19 @@ export class FakeJira {
   }
   async stop() {
     await this.server?.shutdown();
+  }
+
+  /** Attach a file to an issue and return its attachment id and media id. */
+  attach(key: string, file: { filename: string; mimeType?: string; bytes?: Uint8Array; mediaId?: string }) {
+    const a = {
+      id: String(++this.attachmentSeq),
+      filename: file.filename,
+      mimeType: file.mimeType ?? "image/png",
+      bytes: file.bytes ?? new Uint8Array([137, 80, 78, 71]),
+      mediaId: file.mediaId ?? crypto.randomUUID(),
+    };
+    this.attachments.set(key, [...(this.attachments.get(key) ?? []), a]);
+    return a;
   }
 
   seed(s: SeedIssue = {}): Raw {
@@ -177,6 +195,24 @@ export class FakeJira {
   private async handle(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname.replace("/rest/api/3", "");
+    // The media service: files are fetched from a signed address without credentials.
+    let fm: RegExpMatchArray | null;
+    if ((fm = url.pathname.match(/^\/media\/file\/([0-9a-f-]+)\/binary$/))) {
+      const hit = [...this.attachments.values()].flat().find((a) => a.mediaId === fm![1]);
+      return hit ? new Response(hit.bytes as BodyInit, { headers: { "Content-Type": hit.mimeType } }) : new Response("not found", { status: 404 });
+    }
+    if ((fm = path.match(/^\/issue\/([A-Z]+-\d+)\/attachments$/)) && req.method === "POST") {
+      this.requests.push({ method: req.method, path, body: "(multipart)" });
+      if (req.headers.get("authorization") !== this.expectedAuth) return this.json({ errorMessages: ["Unauthorized"] }, 401);
+      const failed = this.failures.shift();
+      if (failed) return this.json(failed.body ?? { errorMessages: ["injected failure"] }, failed.status, failed.headers);
+      if (req.headers.get("x-atlassian-token") !== "no-check") return this.json({ errorMessages: ["XSRF check failed"] }, 403);
+      if (!this.issues.has(fm[1])) return this.json({ errorMessages: ["Issue does not exist"] }, 404);
+      const file = (await req.formData()).get("file");
+      if (!(file instanceof File)) return this.json({ errorMessages: ["No file"] }, 400);
+      const a = this.attach(fm[1], { filename: file.name, mimeType: file.type, bytes: new Uint8Array(await file.arrayBuffer()) });
+      return this.json([{ id: a.id, filename: a.filename, mimeType: a.mimeType, size: a.bytes.length }], 200);
+    }
     const text = await req.text();
     const body = text ? JSON.parse(text) : undefined;
     this.requests.push({ method: req.method, path, body });
@@ -213,10 +249,22 @@ export class FakeJira {
       }
       return found ? this.json(undefined, 204) : this.json({ errorMessages: ["No issue link with id"] }, 404);
     }
+    if ((m = path.match(/^\/attachment\/content\/(\d+)$/)) && req.method === "GET") {
+      const hit = [...this.attachments.values()].flat().find((a) => a.id === m![1]);
+      if (!hit) return this.json({ errorMessages: ["Attachment not found"] }, 404);
+      const origin = new URL(req.url).origin;
+      const target = this.hideMediaIds ? `${origin}/elsewhere/${hit.id}` : `${origin}/media/file/${hit.mediaId}/binary?token=signed&client=x`;
+      return new Response(null, { status: 303, headers: { Location: target } });
+    }
     if ((m = path.match(/^\/issue\/([A-Z]+-\d+)$/))) {
       const issue = this.issues.get(m[1]);
       if (!issue) return this.json({ errorMessages: ["Issue does not exist"] }, 404);
-      if (req.method === "GET") return this.json(issue);
+      if (req.method === "GET") {
+        const files = this.attachments.get(m[1]);
+        if (!files) return this.json(issue);
+        const attachment = files.map((a) => ({ id: a.id, filename: a.filename, mimeType: a.mimeType, size: a.bytes.length, content: `${new URL(req.url).origin}/rest/api/3/attachment/content/${a.id}` }));
+        return this.json({ ...issue, fields: { ...issue.fields, attachment } });
+      }
       if (req.method === "PUT") return this.edit(issue, body);
     }
     if ((m = path.match(/^\/issue\/([A-Z]+-\d+)\/transitions$/))) {

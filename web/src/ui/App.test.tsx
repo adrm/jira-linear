@@ -2320,6 +2320,44 @@ describe("description and sub-issues on the issue page", () => {
     expect(openExternal).toHaveBeenCalledWith("https://jira.test/browse/ABC-1");
   });
 
+  it("a pasted picture is stored on the ticket and written into the description where the cursor is", async () => {
+    warOne(adf("Before"));
+    const { user } = await openWar1();
+    await user.click(within(page()).getByText("Before"));
+    const box = within(page()).getByRole("textbox", { name: "Description" });
+    const shot = new File([new Uint8Array([1, 2, 3])], "image.png", { type: "image/png" });
+    await user.click(box);
+    await user.keyboard("{Control>}{End}{/Control}");
+    fireEvent.paste(box, { clipboardData: { files: [shot], types: ["Files"], getData: () => "" } });
+    await waitFor(() => expect((box as HTMLTextAreaElement).value).toMatch(/^Before\n\n!\[image-\d+\.png\]\(media:media-1\)\n/));
+    expect(server.uploads).toEqual([expect.objectContaining({ key: "ABC-1", type: "image/png" })]);
+  });
+
+  it("a file that is not a picture is added as an attachment, and an upload that fails says why", async () => {
+    warOne(adf("Before"));
+    const { user } = await openWar1();
+    await user.click(within(page()).getByText("Before"));
+    const box = within(page()).getByRole("textbox", { name: "Description" });
+    const input = box.closest(".issue-desc")!.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, new File(["x"], "report.pdf", { type: "application/pdf" }));
+    await waitFor(() => expect((box as HTMLTextAreaElement).value).toContain("![report.pdf](media:media-1?g=1)"));
+    server.uploadError = "File is larger than 25 MB";
+    await user.upload(input, new File(["x"], "big.zip", { type: "application/zip" }));
+    expect(await within(page()).findByRole("alert")).toHaveTextContent("big.zip: File is larger than 25 MB");
+  });
+
+  it("a description with pictures, mentions and line breaks can be edited", async () => {
+    warOne({ type: "doc", version: 1, content: [
+      { type: "paragraph", content: [{ type: "mention", attrs: { id: "u9", text: "@Ana" } }, { type: "text", text: " look" }, { type: "hardBreak" }, { type: "text", text: "below" }] },
+      { type: "mediaSingle", attrs: { layout: "center" }, content: [{ type: "media", attrs: { type: "file", id: "m-1", collection: "", alt: "chart.png" } }] },
+    ] });
+    const { user } = await openWar1();
+    expect(within(page()).getByRole("img", { name: "chart.png" })).toHaveAttribute("src", "/api/media/ABC-1/m-1?name=chart.png");
+    await user.click(page().querySelector(".issue-desc p")!);
+    const box = within(page()).getByRole("textbox", { name: "Description" });
+    expect(box).toHaveValue("@[Ana](mention:u9) look\\\nbelow\n\n![chart.png](media:m-1)");
+  });
+
   it("sub-issues can be added from the page with just a title", async () => {
     const { user } = await openWar1();
     const subs = within(page()).getByRole("region", { name: "Sub-issues" });

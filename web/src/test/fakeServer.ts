@@ -40,6 +40,9 @@ export class FakeServer {
   /** explicit history per project, instead of the generated one */
   history: Record<string, Array<{ key: string; created: string; started: string | null; completed: string | null; canceled?: string | null; points?: number | null }>> = {};
   historyRequests = 0;
+  /** files received by /api/upload/:key, and an error to answer with instead */
+  uploads: Array<{ key: string; name: string; type: string }> = [];
+  uploadError: string | null = null;
   /** createIssue mutations as received, in full */
   created: Array<Record<string, unknown>> = [];
   /** When set, /api/mutate waits for this promise before answering. */
@@ -83,6 +86,13 @@ export class FakeServer {
         canceled: r.statusCategory === "done" && r.resolution === "Won't Do" ? day(8 + i) : null,
         points: r.storyPoints,
       })));
+    }
+    if ((hm = url.pathname.match(/^\/api\/upload\/([^/]+)$/))) {
+      if (this.uploadError) return json({ error: this.uploadError }, 502);
+      const name = url.searchParams.get("name") ?? "";
+      const type = new Headers(init?.headers).get("content-type") ?? "";
+      this.uploads.push({ key: hm[1], name, type });
+      return json({ id: `media-${this.uploads.length}`, name, mime: type });
     }
     if (url.pathname === "/api/inbox/rules") {
       if (init?.method === "PUT") {

@@ -393,3 +393,66 @@ Deno.test("inbox changes tell connected pages to refresh", () =>
     assertEquals(next !== null, true, "no refresh event arrived");
     assertStringIncludes(new TextDecoder().decode(next!.value), "syncId");
   }));
+
+Deno.test("media: an attachment is served by the id its picture is referenced with", () =>
+  setup(async ({ fake, app }) => {
+    fake.seed({ key: "ABC-1" });
+    const a = fake.attach("ABC-1", { filename: "shot.png", mimeType: "image/png", bytes: new Uint8Array([1, 2, 3]) });
+    const res = await get(app, `/api/media/ABC-1/${a.mediaId}`);
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("content-type"), "image/png");
+    assertStringIncludes(res.headers.get("content-disposition") ?? "", "inline");
+    assertEquals(res.headers.get("content-security-policy"), "sandbox");
+    assertEquals([...new Uint8Array(await res.arrayBuffer())], [1, 2, 3]);
+    assertEquals((await get(app, `/api/media/ABC-1/${crypto.randomUUID()}`)).status, 404);
+    assertEquals((await get(app, `/api/media/OTHER-1/${a.mediaId}`)).status, 404);
+  }));
+
+Deno.test("media: files that could run script are downloaded, never shown in place", () =>
+  setup(async ({ fake, app }) => {
+    fake.seed({ key: "ABC-1" });
+    const svg = fake.attach("ABC-1", { filename: "x.svg", mimeType: "image/svg+xml" });
+    const html = fake.attach("ABC-1", { filename: "x.html", mimeType: "text/html" });
+    for (const f of [svg, html]) {
+      const res = await get(app, `/api/media/ABC-1/${f.mediaId}`);
+      assertStringIncludes(res.headers.get("content-disposition") ?? "", "attachment");
+      assertEquals(res.headers.get("x-content-type-options"), "nosniff");
+      await res.body?.cancel();
+    }
+  }));
+
+Deno.test("upload: stores the file on the issue and returns the id to reference it with", () =>
+  setup(async ({ fake, app }) => {
+    fake.seed({ key: "ABC-1" });
+    const res = await app.handler(new Request("http://localhost:8766/api/upload/ABC-1?name=a%2Fb.png", { method: "POST", headers: { "content-type": "image/png" }, body: new Uint8Array([9, 8, 7]) }));
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    const stored = fake.attachments.get("ABC-1")![0];
+    assertEquals(stored.filename, "a_b.png");
+    assertEquals([...stored.bytes], [9, 8, 7]);
+    assertEquals(body, { id: stored.mediaId, name: "a_b.png", mime: "image/png" });
+    const back = await get(app, `/api/media/ABC-1/${body.id}`);
+    assertEquals([...new Uint8Array(await back.arrayBuffer())], [9, 8, 7]);
+  }));
+
+Deno.test("upload: refuses other projects, empty files and a failing Jira", () =>
+  setup(async ({ fake, app }) => {
+    fake.seed({ key: "ABC-1" });
+    const up = (path: string, body: BodyInit | null) => app.handler(new Request(`http://localhost:8766${path}`, { method: "POST", body }));
+    assertEquals((await up("/api/upload/OTHER-1?name=a.png", new Uint8Array([1]))).status, 400);
+    assertEquals((await up("/api/upload/ABC-1?name=a.png", new Uint8Array())).status, 400);
+    fake.failures.push({ status: 403 });
+    const res = await up("/api/upload/ABC-1?name=a.png", new Uint8Array([1]));
+    assertEquals(res.status, 502);
+    await res.body?.cancel();
+    assertEquals(fake.attachments.get("ABC-1"), undefined);
+  }));
+
+Deno.test("upload: says so when Jira will not reveal how to reference the file", () =>
+  setup(async ({ fake, app }) => {
+    fake.seed({ key: "ABC-1" });
+    fake.hideMediaIds = true;
+    const res = await app.handler(new Request("http://localhost:8766/api/upload/ABC-1?name=a.png", { method: "POST", body: new Uint8Array([1]) }));
+    assertEquals(res.status, 502);
+    assertStringIncludes((await res.json()).error, "reference");
+  }));

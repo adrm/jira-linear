@@ -259,7 +259,7 @@ export function ProjectPage({ projectKey }: { projectKey: string }) {
       )}
       {tab === "overview" && epic.descriptionAdf ? (
         <div className="project-desc-wrap">
-          <div className="project-desc"><Adf doc={epic.descriptionAdf} /></div>
+          <div className="project-desc"><Adf doc={epic.descriptionAdf} issueKey={epic.key} /></div>
         </div>
       ) : null}
       {tab === "overview" && sections.length > 0 && (

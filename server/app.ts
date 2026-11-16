@@ -10,6 +10,7 @@ import { validateRules } from "./inbox_rules.ts";
 import type { FieldIds } from "./fields.ts";
 import type { Settings } from "./settings.ts";
 import { discoverWorkflow, type WorkflowConfig } from "./workflow.ts";
+import { createMediaResolver } from "./media.ts";
 
 export interface AppOptions {
   store: Store;
@@ -34,6 +35,7 @@ const OPS = new Set([
   "setDueDate", "setParent", "addComment", "createIssue", "link",
 ]);
 const INBOX_ACTIONS = new Set<string>(["read", "unread", "archive", "unarchive", "delete"] satisfies InboxAction[]);
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const MIME: Record<string, string> = {
   html: "text/html; charset=utf-8", js: "text/javascript", css: "text/css", svg: "image/svg+xml",
@@ -57,6 +59,7 @@ export function createApp(opts: AppOptions) {
   const historyCache = new Map<string, { at: number; data: unknown }>();
   const HISTORY_TTL_MS = 10 * 60_000;
   const keyOk = (k: string) => new RegExp(`^${project}-\\d+$`).test(k);
+  const media = createMediaResolver(client);
 
   function send(controller: ReadableStreamDefaultController<Uint8Array>) {
     controller.enqueue(enc.encode(`data: ${JSON.stringify({ syncId: store.currentSyncId() })}\n\n`));
@@ -258,6 +261,61 @@ export function createApp(opts: AppOptions) {
         store.applyInboxAction(keys as string[], body.action as InboxAction);
         notify();
         return json({ ok: true });
+      }
+    }
+    const mediaPath = pathname.match(/^\/api\/media\/([^/]+)\/(.+)$/);
+    if (req.method === "GET" && mediaPath) {
+      const [, key, rawId] = mediaPath;
+      if (!keyOk(key)) return json({ error: "Not found" }, 404);
+      let id: string;
+      try {
+        id = decodeURIComponent(rawId);
+      } catch {
+        return json({ error: "Not found" }, 404);
+      }
+      try {
+        const att = await media.resolve(key, id, url.searchParams.get("name") ?? undefined);
+        if (!att) return json({ error: "Not found" }, 404);
+        const upstream = await client.fetchAttachment(att.id);
+        if (!upstream.ok || !upstream.body) {
+          await upstream.body?.cancel();
+          return json({ error: "Jira could not provide the file" }, 502);
+        }
+        const mime = /^[\w.+-]+\/[\w.+-]+$/.test(att.mimeType) ? att.mimeType : "application/octet-stream";
+        // Only pictures that cannot run script are shown in place; everything else downloads.
+        const inline = /^image\/(png|jpe?g|gif|webp|bmp|avif)$/i.test(mime);
+        return new Response(upstream.body, {
+          headers: {
+            "content-type": mime,
+            "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(att.filename)}`,
+            "cache-control": "private, max-age=3600",
+            "x-content-type-options": "nosniff",
+            "content-security-policy": "sandbox",
+          },
+        });
+      } catch (e) {
+        return json({ error: e instanceof Error ? e.message : String(e) }, 502);
+      }
+    }
+    const uploadPath = pathname.match(/^\/api\/upload\/([^/]+)$/);
+    if (req.method === "POST" && uploadPath) {
+      const key = uploadPath[1];
+      if (!keyOk(key)) return json({ error: "Key is outside the project" }, 400);
+      const declared = Number(req.headers.get("content-length") ?? 0);
+      if (declared > MAX_UPLOAD_BYTES) return json({ error: "File is larger than 25 MB" }, 413);
+      const bytes = new Uint8Array(await req.arrayBuffer());
+      if (!bytes.length) return json({ error: "File is empty" }, 400);
+      if (bytes.length > MAX_UPLOAD_BYTES) return json({ error: "File is larger than 25 MB" }, 413);
+      // deno-lint-ignore no-control-regex
+      const name = (url.searchParams.get("name") ?? "").replace(/[\\/\x00-\x1f]/g, "_").trim().slice(0, 200) || "attachment";
+      try {
+        const att = await client.uploadAttachment(key, { name, type: req.headers.get("content-type") ?? "", bytes });
+        media.forget(key);
+        const id = await media.mediaIdFor(att.id);
+        if (!id) return json({ error: "Jira stored the file but did not say how to reference it in text" }, 502);
+        return json({ id, name: att.filename, mime: att.mimeType });
+      } catch (e) {
+        return json({ error: e instanceof Error ? e.message : String(e) }, 502);
       }
     }
     if (req.method === "POST" && pathname === "/api/sync") {

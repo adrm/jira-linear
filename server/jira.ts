@@ -14,6 +14,12 @@ export interface JiraClientOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
+export interface AttachmentInfo {
+  id: string;
+  filename: string;
+  mimeType: string;
+}
+
 export type JiraClient = ReturnType<typeof createJiraClient>;
 
 export function createJiraClient(opts: JiraClientOptions) {
@@ -40,8 +46,19 @@ export function createJiraClient(opts: JiraClientOptions) {
     }
   }
 
+  /** A plain request for files: no JSON headers, redirects handled by the caller. */
+  async function raw(method: string, path: string, init: { headers?: Record<string, string>; body?: BodyInit; redirect?: RequestRedirect } = {}): Promise<Response> {
+    return await fetch(opts.baseUrl + path, {
+      method,
+      headers: { Authorization: auth, ...init.headers },
+      body: init.body,
+      redirect: init.redirect ?? "follow",
+    });
+  }
+
   return {
     request,
+    raw,
     async searchAll(jql: string, fields: string[], pageSize = 100, expand?: string): Promise<any[]> {
       const out: any[] = [];
       let nextPageToken: string | undefined;
@@ -67,6 +84,30 @@ export function createJiraClient(opts: JiraClientOptions) {
       await request("POST", `/issue/${key}/remotelink`, { object: { url: link.url, title: link.title } });
     },
     getIssue: (key: string) => request("GET", `/issue/${key}`),
+    async getAttachments(key: string): Promise<AttachmentInfo[]> {
+      const issue = await request("GET", `/issue/${key}?fields=attachment`);
+      return (issue.fields?.attachment ?? []).map((a: any) => ({ id: String(a.id), filename: String(a.filename ?? ""), mimeType: String(a.mimeType ?? "") }));
+    },
+    /**
+     * The id Jira's rich text uses for an attachment. The attachment's content URL redirects to the media service,
+     * and that address names the file by this id.
+     */
+    async mediaIdOf(attachmentId: string): Promise<string | null> {
+      const res = await raw("GET", `/attachment/content/${attachmentId}`, { redirect: "manual" });
+      await res.body?.cancel();
+      const found = /\/file\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(res.headers.get("location") ?? "");
+      return found ? found[1].toLowerCase() : null;
+    },
+    fetchAttachment: (attachmentId: string) => raw("GET", `/attachment/content/${attachmentId}`),
+    async uploadAttachment(key: string, file: { name: string; type: string; bytes: Uint8Array }): Promise<AttachmentInfo> {
+      const form = new FormData();
+      form.append("file", new Blob([file.bytes as BlobPart], { type: file.type || "application/octet-stream" }), file.name);
+      const res = await raw("POST", `/issue/${key}/attachments`, { headers: { "X-Atlassian-Token": "no-check", Accept: "application/json" }, body: form });
+      const text = await res.text();
+      if (!res.ok) throw new JiraError(res.status, text, `Jira POST /issue/${key}/attachments failed: ${res.status}`);
+      const a = JSON.parse(text)[0];
+      return { id: String(a.id), filename: String(a.filename ?? file.name), mimeType: String(a.mimeType ?? file.type) };
+    },
     async listComments(key: string): Promise<any[]> {
       return (await request("GET", `/issue/${key}/comment?maxResults=1000`)).comments;
     },

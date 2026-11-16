@@ -69,7 +69,7 @@ export type MutationBody =
   | { op: "setLabels"; key: string; labels: string[] }
   | { op: "setType"; key: string; issuetype: string }
   | { op: "setSummary"; key: string; summary: string }
-  | { op: "setDescription"; key: string; markdown: string }
+  | { op: "setDescription"; key: string; markdown: string; emoji?: Record<string, { id?: string; text?: string }> }
   | { op: "setDueDate"; key: string; date: string | null }
   | { op: "setParent"; key: string; parentKey: string | null }
   | { op: "addComment"; key: string; markdown: string }

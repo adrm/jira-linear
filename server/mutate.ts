@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import { markdownToAdf } from "../shared/markdown_adf.ts";
+import { type EmojiAttrs, markdownToAdf } from "../shared/markdown_adf.ts";
 import type { Mutation, MutationResult } from "../shared/types.ts";
 import type { Store } from "./db.ts";
 import { type JiraClient, JiraError } from "./jira.ts";
@@ -17,6 +17,17 @@ export interface MutateDeps {
   store: Store;
   project: string;
   fields: FieldIds;
+}
+
+/** Only short names with plain-text id and text are taken from the client. */
+function cleanEmoji(raw: unknown): EmojiAttrs {
+  const out: EmojiAttrs = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const a = v as { id?: unknown; text?: unknown } | null;
+    out[k] = { ...(typeof a?.id === "string" ? { id: a.id } : {}), ...(typeof a?.text === "string" ? { text: a.text } : {}) };
+  }
+  return out;
 }
 
 const bad = (msg: string) => new MutationError(400, msg);
@@ -85,7 +96,7 @@ async function run(deps: MutateDeps, m: Mutation): Promise<string[] | RunResult>
       return [m.key];
     case "setDescription":
       checkKey(deps, m.key);
-      await client.editFields(m.key, { description: m.markdown.trim() ? markdownToAdf(m.markdown) : null });
+      await client.editFields(m.key, { description: m.markdown.trim() ? markdownToAdf(m.markdown, { emoji: cleanEmoji(m.emoji) }) : null });
       return [m.key];
     case "setDueDate":
       checkKey(deps, m.key);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, Flag, Link2, Pencil, Plus } from "lucide-react";
 import type { ActivityEntry, Issue } from "@shared/types";
+import { collectEmoji } from "@shared/adf";
 import { timeline } from "../lib/activity";
 import { adfToMarkdown, isEditable } from "../lib/adfMarkdown";
 import { Adf } from "../adf/render";
@@ -12,6 +13,7 @@ import { subtaskType, typeClass } from "../lib/vocab";
 import { ShowSidebar } from "./Chrome";
 import { Avatar, PriorityIcon, StatusIcon } from "./icons";
 import { JiraKey } from "./JiraKey";
+import { AttachBar, useAttach } from "./attach";
 import { PropRow } from "./PropRow";
 import { RefTable, type RefRow } from "./RefTable";
 import { useApp, useCtx, useDefaultPoints, useIssueMap, useOrder, useStatusFractions, useUi } from "./context";
@@ -123,7 +125,7 @@ export function IssuePage({ embedded = false }: { embedded?: boolean } = {}) {
                   {item.kind === "comment" ? (
                     <article className="comment">
                       <header><Avatar name={item.comment.author?.name ?? null} /><strong>{item.comment.author?.name ?? "Unknown"}</strong><time>{timeAgo(item.comment.created)}</time></header>
-                      <Adf doc={item.comment.bodyAdf} />
+                      <Adf doc={item.comment.bodyAdf} issueKey={issue.key} />
                     </article>
                   ) : (
                     <div className="event">
@@ -248,23 +250,26 @@ function Description({ issue }: { issue: Issue }) {
   const editable = isEditable(issue.descriptionAdf);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(markdown);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const files = useAttach(issue.key, box, (f) => setText(f));
   useEffect(() => { setEditing(false); }, [issue.key]);
   const start = () => { setText(markdown); setEditing(true); };
   const save = () => {
     setEditing(false);
-    if (text.trim() !== markdown.trim()) void app.getState().mutate({ op: "setDescription", key: issue.key, markdown: text });
+    if (text.trim() !== markdown.trim()) void app.getState().mutate({ op: "setDescription", key: issue.key, markdown: text, emoji: collectEmoji(issue.descriptionAdf) });
   };
   if (editing) {
     return (
       <div className="issue-desc editing">
         <textarea
-          className="desc-editor" aria-label="Description" autoFocus rows={10} value={text} onChange={(e) => setText(e.target.value)}
+          ref={box} className="desc-editor" aria-label="Description" autoFocus rows={10} value={text} onChange={(e) => setText(e.target.value)} {...files.handlers}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
             if (e.key === "Escape") { e.stopPropagation(); setEditing(false); }
           }}
         />
         <div className="form-actions">
+          <AttachBar attach={files.attach} busy={files.busy} error={files.error} />
           <button type="button" className="btn" onClick={() => setEditing(false)}>Cancel</button>
           <button type="button" className="btn btn-primary" aria-label="Save description" onClick={save}>Save</button>
         </div>
@@ -280,7 +285,7 @@ function Description({ issue }: { issue: Issue }) {
         className={`issue-desc${editable ? " is-editable" : ""}`} title={editable ? "Click to edit" : undefined}
         onClick={(e) => { if (editable && !(e.target as HTMLElement).closest("a")) start(); }}
       >
-        <Adf doc={issue.descriptionAdf} />
+        <Adf doc={issue.descriptionAdf} issueKey={issue.key} />
       </div>
       {!editable && (
         <p className="muted desc-note">
@@ -354,6 +359,7 @@ function Composer({ issueKey }: { issueKey: string }) {
   const wantsFocus = useUi((s) => s.overlay?.kind === "comment");
   const [text, setText] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
+  const files = useAttach(issueKey, box, (f) => setText(f));
   useEffect(() => { if (wantsFocus) box.current?.focus(); }, [wantsFocus]);
   const send = () => {
     const markdown = text.trim();
@@ -364,10 +370,13 @@ function Composer({ issueKey }: { issueKey: string }) {
     if (ui.getState().overlay?.kind === "comment") ui.getState().closeOverlay();
   };
   return (
-    <textarea
-      ref={box} className="composer" aria-label="Add a comment" placeholder="Leave a comment… (⌘↵ to send)" rows={3}
-      value={text} onChange={(e) => setText(e.target.value)}
-      onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
-    />
+    <div className="composer-wrap">
+      <textarea
+        ref={box} className="composer" aria-label="Add a comment" placeholder="Leave a comment… (⌘↵ to send)" rows={3}
+        value={text} onChange={(e) => setText(e.target.value)} {...files.handlers}
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
+      />
+      <AttachBar attach={files.attach} busy={files.busy} error={files.error} />
+    </div>
   );
 }

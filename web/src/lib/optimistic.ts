@@ -42,7 +42,7 @@ export function applyLocal(issues: IssueMap, m: Mutation, ctx: LocalContext): Is
         parentSummary: m.parentKey ? issues[m.parentKey]?.summary ?? null : null,
       }));
     case "setDescription":
-      return patch(m.key, () => ({ descriptionAdf: m.markdown.trim() ? markdownToAdf(m.markdown) : null }));
+      return patch(m.key, () => ({ descriptionAdf: m.markdown.trim() ? markdownToAdf(m.markdown, { emoji: m.emoji }) : null }));
     case "addComment":
     case "addLink":
       return issues; // rendered from server data; shown once confirmed

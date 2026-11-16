@@ -263,3 +263,9 @@ Deno.test("setDescription with an empty text clears the description", () =>
     await applyMutation(deps, { id: "d1", op: "setDescription", key: "ABC-1", markdown: "  \n" });
     assertEquals(fake.issues.get("ABC-1").fields.description, null);
   }));
+
+Deno.test("setDescription keeps the pictures of emoji the document already had", async () => {
+  const { markdownToAdf } = await import("../shared/markdown_adf.ts");
+  const adf = markdownToAdf("hi :smile:", { emoji: { ":smile:": { id: "1f604", text: "😄" } } });
+  assertEquals(adf.content[0].content.at(-1), { type: "emoji", attrs: { shortName: ":smile:", id: "1f604", text: "😄" } });
+});
