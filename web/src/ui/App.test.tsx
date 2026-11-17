@@ -2355,7 +2355,7 @@ describe("description and sub-issues on the issue page", () => {
     expect(within(page()).getByRole("img", { name: "chart.png" })).toHaveAttribute("src", "/api/media/ABC-1/m-1?name=chart.png");
     await user.click(page().querySelector(".issue-desc p")!);
     const box = within(page()).getByRole("textbox", { name: "Description" });
-    expect(box).toHaveValue("@[Ana](mention:u9) look\\\nbelow\n\n![chart.png](media:m-1)");
+    expect(box).toHaveValue("@Ana look\\\nbelow\n\n![chart.png](media:m-1)");
   });
 
   it("sub-issues can be added from the page with just a title", async () => {
@@ -3154,5 +3154,101 @@ describe("routing", () => {
     expect(window.location.pathname).toMatch(/^\/projects\/[^/]+\/issues$/);
     window.history.back();
     await waitFor(() => expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true"));
+  });
+});
+
+
+// ------------------------------------------------------------ @mentions in the editors
+describe("@mentions when writing", () => {
+  const suggestions = () => screen.queryByRole("listbox", { name: "Mention suggestions" });
+  const composer = () => screen.getByRole("textbox", { name: "Add a comment" });
+  const sentComment = () => server.comments.find((c) => c.issueKey === "ABC-1" && c.id.startsWith("c1") && c.id !== "c1");
+
+  async function openComposer() {
+    const r = await renderApp();
+    await r.user.keyboard("jm");
+    await screen.findByRole("textbox", { name: "Add a comment" });
+    return r;
+  }
+
+  it("typing @ offers people already on tickets; Enter inserts one and the comment goes to Jira as a native mention", async () => {
+    const { user } = await openComposer();
+    await user.type(composer(), "Hi @ra");
+    const list = await screen.findByRole("listbox", { name: "Mention suggestions" });
+    expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["Raul"]);
+    await user.keyboard("{Enter}");
+    expect(composer()).toHaveValue("Hi @Raul ");
+    expect(suggestions()).toBeNull();
+    await user.type(composer(), "please review{Meta>}{Enter}{/Meta}");
+    await waitFor(() => expect(sentComment()).toBeTruthy());
+    expect(JSON.stringify(sentComment()!.bodyAdf)).toContain("Hi @[Raul](mention:u2) please review");
+  });
+
+  it("people Jira knows but no ticket shows come from a search on the server", async () => {
+    server.people = [{ id: "u9", name: "Zed Remote" }];
+    const { user } = await openComposer();
+    await user.type(composer(), "@ze");
+    await user.click(await screen.findByRole("option", { name: "Zed Remote" }));
+    expect(composer()).toHaveValue("@Zed Remote ");
+    await user.type(composer(), "hi{Meta>}{Enter}{/Meta}");
+    await waitFor(() => expect(sentComment()).toBeTruthy());
+    expect(JSON.stringify(sentComment()!.bodyAdf)).toContain("@[Zed Remote](mention:u9) hi");
+  });
+
+  it("arrow keys choose, Escape closes the list without clearing or leaving the box", async () => {
+    server.people = [{ id: "u9", name: "Ana Remote" }];
+    const { user } = await openComposer();
+    await user.type(composer(), "@an");
+    const list = await screen.findByRole("listbox", { name: "Mention suggestions" });
+    await waitFor(() => expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["Ana", "Ana Remote"]));
+    expect(within(list).getByRole("option", { name: "Ana" })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowDown}");
+    expect(within(list).getByRole("option", { name: "Ana Remote" })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Escape}");
+    expect(suggestions()).toBeNull();
+    expect(composer()).toHaveValue("@an");
+    expect(composer()).toBeInTheDocument();
+  });
+
+  it("an @ with nobody matching shows nothing and the text stays plain", async () => {
+    const { user } = await openComposer();
+    await user.type(composer(), "@nobodyhere{Meta>}{Enter}{/Meta}");
+    expect(suggestions()).toBeNull();
+    await waitFor(() => expect(sentComment()).toBeTruthy());
+    expect(JSON.stringify(sentComment()!.bodyAdf)).toContain("@nobodyhere");
+    expect(JSON.stringify(sentComment()!.bodyAdf)).not.toContain("mention:");
+  });
+
+  it("a failed people search still leaves the people from tickets", async () => {
+    server.usersFail = true;
+    const { user } = await openComposer();
+    await user.type(composer(), "@ra");
+    expect(await screen.findByRole("option", { name: "Raul" })).toBeInTheDocument();
+  });
+
+  it("a mention typed out by hand is not a mention; editing a picked name breaks it", async () => {
+    const { user } = await openComposer();
+    await user.type(composer(), "@Raul no pick{Meta>}{Enter}{/Meta}");
+    await waitFor(() => expect(sentComment()).toBeTruthy());
+    expect(JSON.stringify(sentComment()!.bodyAdf)).not.toContain("mention:");
+  });
+
+  it("the description editor shows existing mentions as @Name and saves them back as mentions", async () => {
+    const mention = { type: "mention", attrs: { id: "u2", text: "@Raul", accessLevel: "" } };
+    server.put(mkIssue("ABC-1", {
+      summary: "Fix revenue chart", status: "In Development", statusCategory: "indeterminate", assignee: ana,
+      descriptionAdf: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: "Ping " }, mention] }] } as never,
+    }));
+    const { user } = await renderApp();
+    await user.keyboard("j{Enter}");
+    const page = await screen.findByRole("region", { name: "Issue detail" });
+    await user.click(within(page).getByText("Ping"));
+    const box = within(page).getByRole("textbox", { name: "Description" });
+    expect(box).toHaveValue("Ping @Raul");
+    await user.type(box, " and ");
+    await user.type(box, "@an");
+    await user.click(await screen.findByRole("option", { name: "Ana" }));
+    await user.click(within(page).getByRole("button", { name: "Save description" }));
+    await waitFor(() => expect(JSON.stringify(server.rows.get("ABC-1")!.descriptionAdf)).toContain("Ping @[Raul](mention:u2) and @[Ana](mention:u1)"));
   });
 });

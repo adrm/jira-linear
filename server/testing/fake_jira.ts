@@ -67,6 +67,8 @@ export class FakeJira {
   hideMediaIds = false;
   private attachmentSeq = 9000;
   requests: Array<{ method: string; path: string; body: unknown }> = [];
+  /** People returned by /user/search when their name contains the query. */
+  users: Array<{ accountId: string; displayName: string; active: boolean; accountType: string }> = [];
   /** Queue of failures returned for the next matching requests (any path). */
   failures: Array<{ status: number; body?: unknown; headers?: Record<string, string> }> = [];
   now = "2026-10-15T09:00:00.000+0000";
@@ -237,6 +239,10 @@ export class FakeJira {
       return this.json([{ name: "Task", statuses: STATUSES.map((s) => ({ name: s.name, statusCategory: { key: s.category } })) }]);
     }
     if (req.method === "GET" && path === "/myself") return this.json({ accountId: "me", displayName: "Me", active: true });
+    if (req.method === "GET" && path === "/user/search") {
+      const q = (url.searchParams.get("query") ?? "").toLowerCase();
+      return this.json(this.users.filter((u) => u.displayName.toLowerCase().includes(q)));
+    }
     if (req.method === "POST" && path === "/search/jql") return this.search(body);
     if (req.method === "POST" && path === "/issue") return this.create(body);
     if (req.method === "POST" && path === "/issueLink") return this.link(body);

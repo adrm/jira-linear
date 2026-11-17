@@ -181,6 +181,16 @@ export function createApp(opts: AppOptions) {
         return json({ error: e instanceof Error ? e.message : String(e) }, 502);
       }
     }
+    if (req.method === "GET" && pathname === "/api/users") {
+      const q = (url.searchParams.get("q") ?? "").trim();
+      if (!q) return json([]);
+      try {
+        const people = await client.searchUsers(q);
+        return json(people.filter((u) => u.active && u.accountType === "atlassian").map((u) => ({ id: u.accountId, name: u.displayName })));
+      } catch (e) {
+        return json({ error: e instanceof Error ? e.message : String(e) }, 502);
+      }
+    }
     let m: RegExpMatchArray | null;
     if (req.method === "GET" && (m = pathname.match(/^\/api\/projects\/([^/]+)\/history$/))) {
       if (!keyOk(m[1])) return json({ error: `Not a ${project} project key` }, 400);

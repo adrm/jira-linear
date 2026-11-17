@@ -69,6 +69,9 @@ export function createJiraClient(opts: JiraClientOptions) {
       } while (nextPageToken);
       return out;
     },
+    /** People whose name or email matches; Jira also returns bots and deactivated accounts, callers filter. */
+    searchUsers: (query: string): Promise<Array<{ accountId: string; displayName: string; active: boolean; accountType: string }>> =>
+      request("GET", `/user/search?query=${encodeURIComponent(query)}&maxResults=10`),
     getMyself: (): Promise<{ accountId: string; displayName: string }> => request("GET", "/myself"),
     async getChangelog(key: string): Promise<any[]> {
       const out: any[] = [];

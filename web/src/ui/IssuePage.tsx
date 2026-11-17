@@ -14,6 +14,8 @@ import { ShowSidebar } from "./Chrome";
 import { Avatar, PriorityIcon, StatusIcon } from "./icons";
 import { JiraKey } from "./JiraKey";
 import { AttachBar, useAttach } from "./attach";
+import { MentionTextarea } from "./MentionTextarea";
+import { fromDisplay, toDisplay, type People } from "../lib/mentionText";
 import { PropRow } from "./PropRow";
 import { RefTable, type RefRow } from "./RefTable";
 import { useApp, useCtx, useDefaultPoints, useIssueMap, useOrder, useStatusFractions, useUi } from "./context";
@@ -251,18 +253,20 @@ function Description({ issue }: { issue: Issue }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(markdown);
   const box = useRef<HTMLTextAreaElement>(null);
+  const people = useRef<People>({});
   const files = useAttach(issue.key, box, (f) => setText(f));
   useEffect(() => { setEditing(false); }, [issue.key]);
-  const start = () => { setText(markdown); setEditing(true); };
+  const start = () => { const d = toDisplay(markdown); people.current = d.people; setText(d.text); setEditing(true); };
   const save = () => {
     setEditing(false);
-    if (text.trim() !== markdown.trim()) void app.getState().mutate({ op: "setDescription", key: issue.key, markdown: text, emoji: collectEmoji(issue.descriptionAdf) });
+    const next = fromDisplay(text, people.current);
+    if (next.trim() !== markdown.trim()) void app.getState().mutate({ op: "setDescription", key: issue.key, markdown: next, emoji: collectEmoji(issue.descriptionAdf) });
   };
   if (editing) {
     return (
       <div className="issue-desc editing">
-        <textarea
-          ref={box} className="desc-editor" aria-label="Description" autoFocus rows={10} value={text} onChange={(e) => setText(e.target.value)} {...files.handlers}
+        <MentionTextarea
+          ref={box} className="desc-editor" aria-label="Description" autoFocus rows={10} value={text} onChange={setText} people={people} {...files.handlers}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
             if (e.key === "Escape") { e.stopPropagation(); setEditing(false); }
@@ -359,21 +363,23 @@ function Composer({ issueKey }: { issueKey: string }) {
   const wantsFocus = useUi((s) => s.overlay?.kind === "comment");
   const [text, setText] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
+  const people = useRef<People>({});
   const files = useAttach(issueKey, box, (f) => setText(f));
   useEffect(() => { if (wantsFocus) box.current?.focus(); }, [wantsFocus]);
   const send = () => {
-    const markdown = text.trim();
+    const markdown = fromDisplay(text, people.current).trim();
     if (!markdown) return;
     void app.getState().mutate({ op: "addComment", key: issueKey, markdown });
     setText("");
+    people.current = {};
     box.current?.blur();
     if (ui.getState().overlay?.kind === "comment") ui.getState().closeOverlay();
   };
   return (
     <div className="composer-wrap">
-      <textarea
+      <MentionTextarea
         ref={box} className="composer" aria-label="Add a comment" placeholder="Leave a comment… (⌘↵ to send)" rows={3}
-        value={text} onChange={(e) => setText(e.target.value)} {...files.handlers}
+        value={text} onChange={setText} people={people} {...files.handlers}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
       />
       <AttachBar attach={files.attach} busy={files.busy} error={files.error} />

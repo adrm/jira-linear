@@ -45,6 +45,11 @@ export class FakeServer {
   uploadError: string | null = null;
   /** createIssue mutations as received, in full */
   created: Array<Record<string, unknown>> = [];
+  /** people found by /api/users (name contains the search text), and a failure to answer with instead */
+  people: Array<{ id: string; name: string }> = [];
+  usersFail = false;
+  /** the search texts /api/users received */
+  userSearches: string[] = [];
   /** When set, /api/mutate waits for this promise before answering. */
   gate: Promise<void> | null = null;
   private seq = 100;
@@ -73,6 +78,12 @@ export class FakeServer {
     const url = new URL(String(input), "http://localhost");
     const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status });
     if (url.pathname === "/api/me") return json({ id: "u1", name: "Ana" });
+    if (url.pathname === "/api/users") {
+      const q = url.searchParams.get("q") ?? "";
+      this.userSearches.push(q);
+      if (this.usersFail) return json({ error: "boom" }, 502);
+      return json(this.people.filter((p) => p.name.toLowerCase().includes(q.toLowerCase())));
+    }
     let hm: RegExpMatchArray | null;
     if ((hm = url.pathname.match(/^\/api\/projects\/([^/]+)\/history$/))) {
       this.historyRequests++;

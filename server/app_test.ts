@@ -185,6 +185,34 @@ Deno.test("GET /api/me returns the current Jira user and is cached", () =>
     assertEquals(fake.requests.filter((r) => r.path === "/myself").length, 1);
   }));
 
+Deno.test("GET /api/users searches Jira people, keeping only active people", () =>
+  setup(async ({ fake, app }) => {
+    fake.users = [
+      { accountId: "u-ana", displayName: "Ana López", active: true, accountType: "atlassian" },
+      { accountId: "u-old", displayName: "Ana Former", active: false, accountType: "atlassian" },
+      { accountId: "u-bot", displayName: "Ana Bot", active: true, accountType: "app" },
+      { accountId: "u-bob", displayName: "Bob", active: true, accountType: "atlassian" },
+    ];
+    const res = await get(app, "/api/users?q=ana");
+    assertEquals(res.status, 200);
+    assertEquals(await res.json(), [{ id: "u-ana", name: "Ana López" }]);
+    assertEquals(fake.requests.find((r) => r.path === "/user/search")?.method, "GET");
+  }));
+
+Deno.test("GET /api/users with no search text asks Jira nothing", () =>
+  setup(async ({ fake, app }) => {
+    const res = await get(app, "/api/users?q=%20");
+    assertEquals(res.status, 200);
+    assertEquals(await res.json(), []);
+    assertEquals(fake.requests.filter((r) => r.path === "/user/search").length, 0);
+  }));
+
+Deno.test("GET /api/users reports a Jira failure as 502", () =>
+  setup(async ({ fake, app }) => {
+    fake.failures.push({ status: 500 });
+    assertEquals((await get(app, "/api/users?q=ana")).status, 502);
+  }));
+
 Deno.test("GET /api/projects/:key/history returns ticket timings and is cached until something changes", () =>
   setup(async ({ fake, app }) => {
     fake.seed({ key: "ABC-10", issuetype: "Epic" });
