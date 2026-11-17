@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { localContext } from "../store/store";
+import { caretPosition } from "../lib/caretPosition";
 import { activeMention, uniqueLabel, type People } from "../lib/mentionText";
 import { useApp, useCtx } from "./context";
 
@@ -29,6 +30,7 @@ export function MentionTextarea({ value, onChange, people, ref, onKeyDown, onKey
   const [dismissed, setDismissed] = useState<number | null>(null);
   const [sel, setSel] = useState(0);
   const [remote, setRemote] = useState<Person[]>([]);
+  const [at, setAt] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
 
   const query = trigger?.query.trim() ?? "";
   useEffect(() => {
@@ -63,6 +65,11 @@ export function MentionTextarea({ value, onChange, people, ref, onKeyDown, onKey
 
   const look = (el: HTMLTextAreaElement) => {
     const t = activeMention(el.value, el.selectionStart ?? el.value.length, people.current);
+    if (t) {
+      const c = caretPosition(el, t.start);
+      // keep the list inside the box horizontally (it is at least 200px wide)
+      setAt({ left: Math.max(0, Math.min(c.left, el.clientWidth - 200)), top: Math.max(0, Math.min(c.top + c.height, el.clientHeight)) });
+    }
     setTrigger((prev) => (prev?.start === t?.start && prev?.query === t?.query ? prev : t));
   };
 
@@ -111,7 +118,7 @@ export function MentionTextarea({ value, onChange, people, ref, onKeyDown, onKey
         }}
       />
       {open && (
-        <ul id={listId} role="listbox" aria-label="Mention suggestions" className="menu mention-list">
+        <ul id={listId} role="listbox" aria-label="Mention suggestions" className="menu mention-list" style={{ left: at.left, top: at.top }}>
           {items.map((p, i) => (
             <li
               key={p.id} id={`${listId}-${i}`} role="option" aria-selected={i === active} className="menu-item"
