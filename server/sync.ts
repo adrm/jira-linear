@@ -49,7 +49,8 @@ async function ingest(deps: SyncDeps, raws: any[], inbox?: InboxRun, fullLoad = 
 
     const embedded = raw.fields.comment;
     let rawComments: any[] = embedded?.comments ?? [];
-    if (embedded && embedded.total > rawComments.length) {
+    // The comments embedded in search results lack `parentId`, which marks replies; the comment list has it.
+    if (embedded && (embedded.total > rawComments.length || rawComments.length > 0)) {
       rawComments = await deps.client.listComments(issue.key);
     }
     const comments = rawComments.map((c) => normalizeComment(issue.key, c));

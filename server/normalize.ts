@@ -64,6 +64,7 @@ export function normalizeComment(issueKey: string, raw: Raw): Comment {
     issueKey,
     author: user(raw.author),
     bodyAdf: raw.body ?? null,
+    ...(raw.parentId != null ? { parentId: String(raw.parentId) } : {}),
     created: raw.created,
     updated: raw.updated,
   };

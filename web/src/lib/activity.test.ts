@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActivityEntry, Comment } from "@shared/types";
-import { describeActivity, timeline } from "./activity";
+import { describeActivity, threads, timeline } from "./activity";
 import { mkIssue } from "../test/fakeServer";
 
 const e = (field: string, from: string | null, to: string | null, at = "2026-09-02T10:00:00.000+0000"): ActivityEntry => ({ id: `${field}${at}`, at, author: { id: "u1", name: "Ana" }, field, from, to });
@@ -43,5 +43,20 @@ describe("timeline", () => {
   });
   it("copes with a missing reporter", () => {
     expect(timeline(mkIssue("ABC-2", { reporter: null }), [], [])[0]).toMatchObject({ who: "Someone" });
+  });
+});
+
+describe("threads", () => {
+  const c = (id: string, at: string, parentId?: string): Comment => ({ id, issueKey: "ABC-1", author: { id: "u2", name: "Bea" }, bodyAdf: null, parentId, created: at, updated: at });
+  it("puts replies, also replies to replies, under the comment that started the thread, oldest first", () => {
+    const out = threads([c("1", "2026-09-01"), c("3", "2026-09-03", "2"), c("2", "2026-09-02", "1"), c("4", "2026-09-04")]);
+    expect(out.map((t) => [t.comment.id, t.replies.map((r) => r.id)])).toEqual([["1", ["2", "3"]], ["4", []]]);
+  });
+  it("shows a reply on its own when its parent is gone", () => {
+    expect(threads([c("2", "2026-09-02", "99")]).map((t) => t.comment.id)).toEqual(["2"]);
+  });
+  it("a reply does not add its own row to the timeline", () => {
+    const items = timeline(mkIssue("ABC-1"), [c("1", "2026-09-01T10:00:00.000+0000"), c("2", "2026-09-02T10:00:00.000+0000", "1")], []);
+    expect(items.filter((i) => i.kind === "comment")).toHaveLength(1);
   });
 });

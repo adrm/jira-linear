@@ -595,3 +595,7 @@ button.side-row:hover { background: var(--hover); }
 .inbox-row:hover .inbox-actions, .inbox-row.is-selected .inbox-actions { display: flex; }
 .inbox-epic { padding: 28px 24px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .inbox-epic h2 { margin: 0; font-size: 16px; }
+
+.timeline .comment .replies { list-style: none; margin: 10px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.timeline .comment .reply header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.timeline .comment .reply time { color: var(--muted); }

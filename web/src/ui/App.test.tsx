@@ -1952,6 +1952,14 @@ describe("issue page", () => {
     expect(within(page()).getByRole("textbox", { name: "Add a comment" })).toBeInTheDocument();
   });
 
+  it("shows replies nested under the comment they answer", async () => {
+    server.addComment({ id: "c2", issueKey: "ABC-1", author: ana, parentId: "c1", bodyAdf: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: "Agreed, shipping it" }] }] }, created: "2026-10-14T12:00:00.000+0000", updated: "2026-10-14T12:00:00.000+0000" });
+    await openFirst();
+    const replies = within(page()).getByRole("list", { name: /Replies to/ });
+    expect(within(replies).getByText("Agreed, shipping it")).toBeInTheDocument();
+    expect(within(page()).getAllByText("Agreed, shipping it")).toHaveLength(1);
+  });
+
   it("Open in Jira and Copy link are in the page header", async () => {
     const { user, openExternal, copyText } = await openFirst();
     await user.click(screen.getByRole("button", { name: "Open in Jira" }));

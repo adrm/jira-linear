@@ -92,6 +92,18 @@ Deno.test("a new comment on an issue is picked up incrementally", () =>
     assertEquals(store.delta(0).comments.length, 1);
   }));
 
+Deno.test("a reply keeps its parent even when the search result embeds every comment", () =>
+  setup(async ({ fake, store, deps }) => {
+    fake.seed({ key: "ABC-1" });
+    const first = fake.addCommentDirect("ABC-1", "question");
+    const reply = fake.addCommentDirect("ABC-1", "answer");
+    reply.parentId = first.id;
+    await syncOnce(deps);
+    const byId = new Map(store.delta(0).comments.map((c) => [c.id, c]));
+    assertEquals(byId.get(String(reply.id))?.parentId, String(first.id));
+    assertEquals(byId.get(String(first.id))?.parentId, undefined);
+  }));
+
 Deno.test("comments are fetched separately when the embedded list is truncated", () =>
   setup(async ({ fake, store, deps }) => {
     fake.seed({ key: "ABC-1" });

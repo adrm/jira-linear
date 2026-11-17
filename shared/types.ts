@@ -52,6 +52,8 @@ export interface Comment {
   issueKey: string;
   author: UserRef | null;
   bodyAdf: unknown | null;
+  /** the comment this one replies to (Jira returns it on replies, though its docs do not list it) */
+  parentId?: string | null;
   created: string;
   updated: string;
 }

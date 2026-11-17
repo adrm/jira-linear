@@ -128,6 +128,16 @@ export function IssuePage({ embedded = false }: { embedded?: boolean } = {}) {
                     <article className="comment">
                       <header><Avatar name={item.comment.author?.name ?? null} /><strong>{item.comment.author?.name ?? "Unknown"}</strong><time>{timeAgo(item.comment.created)}</time></header>
                       <Adf doc={item.comment.bodyAdf} issueKey={issue.key} />
+                      {item.replies.length > 0 && (
+                        <ol className="replies" aria-label={`Replies to ${item.comment.author?.name ?? "comment"}`}>
+                          {item.replies.map((r) => (
+                            <li key={r.id} className="reply">
+                              <header><Avatar name={r.author?.name ?? null} /><strong>{r.author?.name ?? "Unknown"}</strong><time>{timeAgo(r.created)}</time></header>
+                              <Adf doc={r.bodyAdf} issueKey={issue.key} />
+                            </li>
+                          ))}
+                        </ol>
+                      )}
                     </article>
                   ) : (
                     <div className="event">

@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS inbox_seen (id TEXT PRIMARY KEY);
 `;
 
 /** Bump when synced data gains fields, so an existing mirror is fetched again in full. */
-const SCHEMA_VERSION = "4";
+const SCHEMA_VERSION = "6";
 
 export function openStore(path: string): Store {
   const db = new DatabaseSync(path);

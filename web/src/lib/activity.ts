@@ -39,14 +39,35 @@ export function describeActivity(a: ActivityEntry): string {
 export type TimelineItem =
   | { kind: "created"; id: string; at: string; who: string }
   | { kind: "event"; id: string; at: string; who: string; text: string }
-  | { kind: "comment"; id: string; at: string; comment: Comment };
+  | { kind: "comment"; id: string; at: string; comment: Comment; replies: Comment[] };
+
+/**
+ * Comments grouped into threads. A reply (also a reply to a reply) goes under the comment that started the thread,
+ * oldest first; a reply whose parent is gone stands on its own.
+ */
+export function threads(comments: Comment[]): Array<{ comment: Comment; replies: Comment[] }> {
+  const byId = new Map(comments.map((c) => [c.id, c]));
+  const root = (c: Comment): Comment => {
+    let cur = c;
+    for (let hops = 0; cur.parentId && byId.has(cur.parentId) && hops < comments.length; hops++) cur = byId.get(cur.parentId)!;
+    return cur;
+  };
+  const out = new Map<string, { comment: Comment; replies: Comment[] }>();
+  for (const c of comments) if (root(c) === c) out.set(c.id, { comment: c, replies: [] });
+  for (const c of comments) {
+    const r = root(c);
+    if (r !== c) out.get(r.id)!.replies.push(c);
+  }
+  for (const t of out.values()) t.replies.sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+  return [...out.values()];
+}
 
 /** Creation, changes and comments of a ticket in the order they happened. */
 export function timeline(issue: Issue, comments: Comment[], activity: ActivityEntry[]): TimelineItem[] {
   const items: TimelineItem[] = [
     { kind: "created", id: "created", at: issue.created, who: issue.reporter?.name ?? "Someone" },
     ...activity.map((a): TimelineItem => ({ kind: "event", id: a.id, at: a.at, who: a.author?.name ?? "Someone", text: describeActivity(a) })),
-    ...comments.map((c): TimelineItem => ({ kind: "comment", id: `c${c.id}`, at: c.created, comment: c })),
+    ...threads(comments).map((t): TimelineItem => ({ kind: "comment", id: `c${t.comment.id}`, at: t.comment.created, comment: t.comment, replies: t.replies })),
   ];
   return items.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.kind === "created" ? -1 : 0));
 }

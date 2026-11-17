@@ -116,6 +116,12 @@ Deno.test("normalizeComment maps author and body", () => {
   assertEquals(c, { id: "9", issueKey: "ABC-2", author: { id: "a1", name: "Ana" }, bodyAdf: adfText("hi"), created: "c", updated: "u" });
 });
 
+Deno.test("normalizeComment keeps the parent of a reply and leaves plain comments without one", () => {
+  const raw = { id: "9", author: { accountId: "a1", displayName: "Ana" }, body: adfText("hi"), created: "c", updated: "u" };
+  assertEquals(normalizeComment("ABC-2", { ...raw, parentId: 8 }).parentId, "8");
+  assertEquals("parentId" in normalizeComment("ABC-2", raw), false);
+});
+
 Deno.test("story points and resolution are read from the ticket", () => {
   const fake = new FakeJira();
   const i = normalizeIssue(fake.seed({ key: "ABC-7", points: 5, resolution: "Won't Do" }));

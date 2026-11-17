@@ -370,7 +370,9 @@ export class FakeJira {
     for (const f of wantFields ?? Object.keys(raw.fields)) {
       if (f === "comment") {
         const cs = this.comments.get(raw.key) ?? [];
-        fields.comment = { comments: this.truncateEmbeddedComments === undefined ? cs : cs.slice(0, this.truncateEmbeddedComments), total: cs.length, maxResults: 20, startAt: 0 };
+        // like Jira, the comments embedded in search results do not carry `parentId`; the comment list does
+        const embedded = (this.truncateEmbeddedComments === undefined ? cs : cs.slice(0, this.truncateEmbeddedComments)).map(({ parentId: _p, ...rest }) => rest);
+        fields.comment = { comments: embedded, total: cs.length, maxResults: 20, startAt: 0 };
       } else if (f in raw.fields) fields[f] = raw.fields[f];
     }
     const out: Raw = { id: raw.id, key: raw.key, fields };
