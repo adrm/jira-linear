@@ -2,9 +2,33 @@
 import type { InboxEvent, InboxEventKind } from "../shared/inbox.ts";
 import type { UserRef } from "../shared/types.ts";
 import { FIELDS } from "./activity.ts";
+import type { FieldIds } from "./fields.ts";
 
 const KINDS: Record<string, InboxEventKind> = { ...(FIELDS as Record<string, InboxEventKind>), link: "links", description: "description" };
 const EXCERPT_CHARS = 160;
+
+const QA_NAMES = ["qa assignee"];
+const POINTS_NAMES = ["story points", "story point estimate"];
+
+/** Which inbox kind a changelog item is, or undefined when the inbox does not follow that field. */
+function kindOf(item: any, fields: FieldIds): InboxEventKind | undefined {
+  if (item.fieldId) {
+    if (item.fieldId === fields.qaAssignee) return "qaAssignee";
+    if (item.fieldId === fields.storyPoints) return "points";
+  }
+  const name = String(item.field).toLowerCase();
+  if (!fields.qaAssignee && QA_NAMES.includes(name)) return "qaAssignee";
+  if (!fields.storyPoints && POINTS_NAMES.includes(name)) return "points";
+  return KINDS[name];
+}
+
+/** Jira writes number fields as `3.0`; show `3`. Empty means none. */
+function value(kind: InboxEventKind, s: unknown): string | null {
+  if (!s) return null;
+  const str = String(s);
+  if (kind === "points" && Number.isFinite(Number(str))) return String(Number(str));
+  return str;
+}
 
 const user = (u: any): UserRef | null => (u?.accountId ? { id: u.accountId, name: u.displayName ?? u.accountId } : null);
 
@@ -29,9 +53,10 @@ function plainText(adf: any): string {
 /**
  * What happened to one ticket that the inbox might care about, oldest first. `raw` is a Jira issue fetched with
  * `expand=changelog` and its comments. Only things dated after `installedAt` count, the owner's own changes are
- * left out, and comments already in the mirror are known. Rules are applied later, not here.
+ * left out, and comments already in the mirror are known. Rules are applied later, not here. QA assignee and story
+ * points are custom fields, so they are recognised by Jira field id (`fields`), falling back to the usual names.
  */
-export function detectEvents(raw: any, known: { commentIds: ReadonlySet<string> }, meId: string, installedAt: string): InboxEvent[] {
+export function detectEvents(raw: any, known: { commentIds: ReadonlySet<string> }, meId: string, installedAt: string, fields: FieldIds = {}): InboxEvent[] {
   const key: string = raw.key;
   const out: InboxEvent[] = [];
 
@@ -43,10 +68,10 @@ export function detectEvents(raw: any, known: { commentIds: ReadonlySet<string> 
   for (const h of raw.changelog?.histories ?? []) {
     if (!after(h.created, installedAt) || h.author?.accountId === meId) continue;
     (h.items ?? []).forEach((item: any, i: number) => {
-      const kind = KINDS[String(item.field).toLowerCase()];
+      const kind = kindOf(item, fields);
       if (!kind) return;
       const ev: InboxEvent = {
-        id: `h:${h.id}:${i}`, key, kind, at: h.created, author: user(h.author), from: item.fromString || null, to: item.toString || null,
+        id: `h:${h.id}:${i}`, key, kind, at: h.created, author: user(h.author), from: value(kind, item.fromString), to: value(kind, item.toString),
       };
       if (kind === "assignee") {
         if (item.to === meId) ev.assignment = "to-me";

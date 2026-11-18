@@ -1,6 +1,6 @@
 import type { InboxEntry, InboxEvent, InboxEventKind } from "@shared/inbox";
 
-const MOVED: Partial<Record<InboxEventKind, string>> = { status: "Status", assignee: "Assignee", priority: "Priority", duedate: "Due date", type: "Type", parent: "Parent" };
+const MOVED: Partial<Record<InboxEventKind, string>> = { status: "Status", assignee: "Assignee", priority: "Priority", duedate: "Due date", type: "Type", parent: "Parent", qaAssignee: "QA assignee" };
 const CHANGED: Partial<Record<InboxEventKind, string>> = { summary: "Title changed", description: "Description changed", labels: "Labels changed", links: "Links changed" };
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -18,6 +18,7 @@ export function summarizeEvents(events: InboxEvent[]): string {
       return of.length === 1 ? "Mentioned you" : `Mentioned you · ${plural(of.length, "comment")}`;
     }
     if (CHANGED[kind]) return CHANGED[kind]!;
+    if (kind === "points") return `Story points ${of[0].from ?? "none"} → ${last.to ?? "none"}`;
     const label = MOVED[kind]!;
     if (kind === "status" && of[0].from) return `${label} ${of[0].from} → ${last.to ?? "none"}`;
     return `${label} → ${last.to ?? (kind === "assignee" ? "Unassigned" : "none")}`;

@@ -75,6 +75,15 @@ Deno.test("field changes are dropped by default and delivered when their flag is
   assertEquals(notify(ev, rules({ scope: "involved", fields: { ...DEFAULT_RULES.fields, priority: true } }), false), false);
 });
 
+Deno.test("QA assignee and story point changes follow their own flags and the scope", () => {
+  for (const kind of ["qaAssignee", "points"] as const) {
+    const ev = event({ kind, from: "1", to: "2" });
+    assertEquals(notify(ev, rules(), true), false);
+    assertEquals(notify(ev, rules({ fields: { ...DEFAULT_RULES.fields, [kind]: true } }), true), true);
+    assertEquals(notify(ev, rules({ scope: "involved", fields: { ...DEFAULT_RULES.fields, [kind]: true } }), false), false);
+  }
+});
+
 Deno.test("isInvolved is true for assignee, reporter, QA assignee, watching and commented, and false otherwise", () => {
   assertEquals(isInvolved(issue(), ME, false, false), false);
   assertEquals(isInvolved(issue({ assignee: { id: ME, name: "Me" } }), ME, false, false), true);

@@ -2,7 +2,7 @@
 import type { UserRef } from "./types.ts";
 
 export type InboxEventKind =
-  | "created" | "status" | "assignee" | "priority" | "duedate" | "summary" | "description" | "labels" | "type" | "parent" | "links" | "comment";
+  | "created" | "status" | "assignee" | "priority" | "duedate" | "summary" | "description" | "labels" | "type" | "parent" | "links" | "qaAssignee" | "points" | "comment";
 
 export interface InboxEvent {
   /** `h:<history id>:<item index>`, `c:<comment id>` or `new:<key>`; the same change always has the same id */
@@ -43,7 +43,7 @@ export interface InboxRules {
   status: { mode: "off" | "any" } | { mode: "into"; statuses: string[] };
   comments: "off" | "mentions" | "all";
   newTickets: { mode: "off" | "assigned" | "all" | "epics"; epics: string[] };
-  fields: { priority: boolean; duedate: boolean; summary: boolean; description: boolean; labels: boolean; type: boolean; parent: boolean; links: boolean };
+  fields: { priority: boolean; duedate: boolean; summary: boolean; description: boolean; labels: boolean; type: boolean; parent: boolean; links: boolean; qaAssignee: boolean; points: boolean };
 }
 
 export const DEFAULT_RULES: InboxRules = {
@@ -53,5 +53,5 @@ export const DEFAULT_RULES: InboxRules = {
   status: { mode: "any" },
   comments: "all",
   newTickets: { mode: "assigned", epics: [] },
-  fields: { priority: false, duedate: false, summary: false, description: true, labels: false, type: false, parent: false, links: false },
+  fields: { priority: false, duedate: false, summary: false, description: true, labels: false, type: false, parent: false, links: false, qaAssignee: false, points: false },
 };

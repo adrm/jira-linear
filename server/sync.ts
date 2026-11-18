@@ -66,6 +66,7 @@ async function ingest(deps: SyncDeps, raws: any[], inbox?: InboxRun, fullLoad = 
         { commentIds: new Set(mirrored.map((c) => c.id)) },
         inbox.meId,
         inbox.installedAt,
+        deps.fields,
       );
       if (events.length) {
         const commented = [...mirrored, ...comments].some((c) => c.author?.id === inbox.meId || mentionsUser(c.bodyAdf, inbox.meId));

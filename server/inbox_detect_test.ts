@@ -32,6 +32,26 @@ Deno.test("a status change becomes one event with the names and the author", () 
   }]);
 });
 
+Deno.test("QA assignee and story point changes are recognised by field id, with story points shown without the trailing .0", () => {
+  const fields = { qaAssignee: "customfield_20", storyPoints: "customfield_10" };
+  const qa = { field: "QA Lead", fieldId: "customfield_20", fromString: "Bo", toString: "Cy" };
+  const sp = { field: "Story point estimate", fieldId: "customfield_10", fromString: "3.0", toString: "5.0" };
+  const events = detectEvents(raw({ histories: [history("10", "2026-11-13T10:00:00.000+0000", ANA, [qa, sp])] }), none, ME, INSTALLED, fields);
+  assertEquals(events.map((e) => [e.kind, e.from, e.to]), [["qaAssignee", "Bo", "Cy"], ["points", "3", "5"]]);
+});
+
+Deno.test("without resolved fields the usual names are still recognised, and unestimated shows as none", () => {
+  const qa = { field: "QA Assignee", fromString: null, toString: "Cy" };
+  const sp = { field: "Story Points", fromString: "3.0", toString: null };
+  const events = detectEvents(raw({ histories: [history("10", "2026-11-13T10:00:00.000+0000", ANA, [qa, sp])] }), none, ME, INSTALLED);
+  assertEquals(events.map((e) => [e.kind, e.from, e.to]), [["qaAssignee", null, "Cy"], ["points", "3", null]]);
+});
+
+Deno.test("an unrelated custom field is ignored", () => {
+  const other = { field: "Sprint", fieldId: "customfield_99", fromString: "1", toString: "2" };
+  assertEquals(detectEvents(raw({ histories: [history("10", "2026-11-13T10:00:00.000+0000", ANA, [other])] }), none, ME, INSTALLED, { qaAssignee: "customfield_20" }), []);
+});
+
 Deno.test("the owner's own change is dropped while a colleague's change in the same issue is kept", () => {
   const events = detectEvents(
     raw({

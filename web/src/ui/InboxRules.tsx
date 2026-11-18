@@ -6,7 +6,7 @@ import { Choice } from "./Choice";
 import { useApp, useCtx, useIssueMap } from "./context";
 
 const FIELDS: Array<[keyof Rules["fields"], string]> = [
-  ["priority", "Priority"], ["duedate", "Due date"], ["summary", "Title"], ["description", "Description"], ["labels", "Labels"], ["type", "Type"], ["parent", "Parent"], ["links", "Links"],
+  ["priority", "Priority"], ["duedate", "Due date"], ["summary", "Title"], ["description", "Description"], ["labels", "Labels"], ["type", "Type"], ["parent", "Parent"], ["links", "Links"], ["qaAssignee", "QA assignee"], ["points", "Story points"],
 ];
 
 function Check({ label, text, checked, onChange }: { label: string; text?: string; checked: boolean; onChange(v: boolean): void }) {

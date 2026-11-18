@@ -17,6 +17,13 @@ describe("summarizeEvents", () => {
     ])).toBe("Status In Progress → In Review · 2 comments · Assignee → Ana");
   });
 
+  it("describes QA assignee and story point changes", () => {
+    expect(summarizeEvents([ev({ kind: "qaAssignee", from: "Bo", to: "Cy" })])).toBe("QA assignee → Cy");
+    expect(summarizeEvents([ev({ kind: "qaAssignee", from: "Bo", to: null })])).toBe("QA assignee → none");
+    expect(summarizeEvents([ev({ kind: "points", from: "3", to: "5" }), ev({ kind: "points", from: "5", to: "8" })])).toBe("Story points 3 → 8");
+    expect(summarizeEvents([ev({ kind: "points", from: null, to: "2" })])).toBe("Story points none → 2");
+  });
+
   it("says a lone comment that mentions the owner is a mention, and keeps the count when there are more", () => {
     expect(summarizeEvents([ev({ kind: "comment", mentionsMe: true })])).toBe("Mentioned you");
     expect(summarizeEvents([ev({ kind: "comment", mentionsMe: true }), ev({ kind: "comment" })])).toBe("Mentioned you · 2 comments");
