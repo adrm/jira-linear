@@ -233,7 +233,7 @@ Deno.test("inbox: a read entry becomes unread on a new event and keeps the earli
   s.addInboxEvents([ev("e2", "ABC-1", "2026-11-13T11:00:00.000Z")]);
   const [entry] = s.inbox();
   assertEquals([entry.state, entry.readAt], ["unread", readAt]);
-  assertEquals(entry.events.map((e) => e.id), ["e2"]); // what it was unread for since the read mark
+  assertEquals(entry.events.map((e) => e.id), ["e1", "e2"]); // reading does not drop earlier changes
 });
 
 Deno.test("inbox: reading an entry that is already read or archived changes nothing", () => {
@@ -258,6 +258,29 @@ Deno.test("inbox: an archived entry comes back unread on a new event", () => {
   s.applyInboxAction(["ABC-1"], "archive");
   s.applyInboxAction(["ABC-1"], "unarchive");
   assertEquals(s.inbox()[0].state, "read");
+});
+
+Deno.test("inbox: the list of changes survives reading and unarchiving, and starts over when an archived entry comes back", () => {
+  const s = openStore(":memory:");
+  s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]);
+  s.applyInboxAction(["ABC-1"], "read");
+  s.addInboxEvents([ev("e2", "ABC-1", "2026-11-13T11:00:00.000Z")]);
+  s.applyInboxAction(["ABC-1"], "read");
+  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e1", "e2"]);
+  s.applyInboxAction(["ABC-1"], "archive");
+  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e1", "e2"]);
+  s.applyInboxAction(["ABC-1"], "unarchive");
+  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e1", "e2"]);
+  s.applyInboxAction(["ABC-1"], "archive");
+  s.addInboxEvents([ev("e3", "ABC-1", "2026-11-13T12:00:00.000Z"), ev("e4", "ABC-1", "2026-11-13T12:05:00.000Z")]);
+  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e3", "e4"]);
+});
+
+Deno.test("inbox: rules saved before the description row existed get its default", () => {
+  const s = openStore(":memory:");
+  const { description: _, ...fields } = DEFAULT_RULES.fields;
+  s.setInboxRules({ ...DEFAULT_RULES, fields: fields as typeof DEFAULT_RULES.fields });
+  assertEquals(s.inboxRules().fields.description, true);
 });
 
 Deno.test("inbox: deleting an entry removes it, and the ticket's next new event starts a fresh entry with only that event", () => {
@@ -331,18 +354,19 @@ Deno.test("inbox: ids marked seen never become events", () => {
   assertEquals(s.inbox(), []);
 });
 
-Deno.test("inbox: an entry that is not unread lists only the events of its last batch, the unread one all of them", async () => {
+Deno.test("inbox: marking a read entry unread again moves the read mark back to the one before, events stay whole", async () => {
   const pause = () => new Promise((r) => setTimeout(r, 5));
   const s = openStore(":memory:");
   s.addInboxEvents([ev("e1", "ABC-1", "2026-11-13T10:00:00.000Z")]);
   await pause();
   s.applyInboxAction(["ABC-1"], "read");
+  const firstRead = s.inbox()[0].readAt;
   await pause();
   s.addInboxEvents([ev("e2", "ABC-1", "2026-11-13T11:00:00.000Z")]);
-  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e2"]); // unread: what arrived after the read mark
   await pause();
   s.applyInboxAction(["ABC-1"], "read");
-  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e2"]); // read: the batch it was last unread for
-  s.applyInboxAction(["ABC-1"], "archive");
-  assertEquals(s.inbox()[0].events.map((e) => e.id), ["e2"]);
+  s.applyInboxAction(["ABC-1"], "unread");
+  const [entry] = s.inbox();
+  assertEquals([entry.state, entry.readAt], ["unread", firstRead]);
+  assertEquals(entry.events.map((e) => e.id), ["e1", "e2"]);
 });

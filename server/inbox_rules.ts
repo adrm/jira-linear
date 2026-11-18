@@ -1,7 +1,7 @@
 import type { InboxEvent, InboxRules } from "../shared/inbox.ts";
 import type { Issue } from "../shared/types.ts";
 
-const FIELD_KINDS = ["priority", "duedate", "summary", "labels", "type", "parent", "links"] as const;
+const FIELD_KINDS = ["priority", "duedate", "summary", "description", "labels", "type", "parent", "links"] as const;
 
 /** The owner is on the ticket (assignee, reporter, QA assignee, watcher) or has commented on it or been mentioned on it. */
 export function isInvolved(issue: Issue, meId: string, watching: boolean, commented: boolean): boolean {

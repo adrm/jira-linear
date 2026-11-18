@@ -51,14 +51,14 @@ function Row({ entry, selected, summary, onOpen, onAct }: { entry: InboxEntry; s
   );
 }
 
-function SinceLastVisit({ events }: { events: InboxEvent[] }) {
+function Changes({ events, fresh }: { events: InboxEvent[]; fresh: ReadonlySet<string> }) {
   if (!events.length) return null;
   return (
-    <section role="region" aria-label="Since your last visit" className="inbox-since">
-      <h2>Since your last visit</h2>
+    <section role="region" aria-label="Changes" className="inbox-since">
+      <h2>Changes</h2>
       <ul>
         {events.map((e) => (
-          <li key={e.id}><span>{describeEvent(e)}</span><span className="muted">{e.author?.name ? `${e.author.name} · ` : ""}{timeAgo(e.at)}</span></li>
+          <li key={e.id}><span>{fresh.has(e.id) && <strong className="inbox-new">New </strong>}{describeEvent(e)}</span><span className="muted">{e.author?.name ? `${e.author.name} · ` : ""}{timeAgo(e.at)}</span></li>
         ))}
       </ul>
     </section>
@@ -73,7 +73,7 @@ export function Inbox() {
   const issues = useIssueMap();
   const rows = useMemo(() => inboxRows(inbox, tab, key), [inbox, tab, key]);
   const selected = key ? inbox.find((e) => e.key === key) : undefined;
-  // What was new when the ticket was opened stays on screen after reading it has cleared the unseen mark.
+  // What was new when the ticket was opened stays flagged after reading it has moved the unseen mark.
   const [seen, setSeen] = useState<Record<string, InboxEvent[]>>({});
   useEffect(() => {
     if (selected?.state === "unread") setSeen((s) => ({ ...s, [selected.key]: unseenEvents(selected) }));
@@ -101,14 +101,13 @@ export function Inbox() {
         </header>
         <div role="listbox" aria-label="Inbox" className="inbox-rows">
           {rows.map((e) => {
-            const unseen = unseenEvents(e);
-            return <Row key={e.key} entry={e} selected={e.key === key} summary={summarizeEvents(unseen.length ? unseen : e.events)} onOpen={() => ui.getState().select(e.key)} onAct={(action) => actOn(e, action)} />;
+            return <Row key={e.key} entry={e} selected={e.key === key} summary={summarizeEvents(e.events)} onOpen={() => ui.getState().select(e.key)} onAct={(action) => actOn(e, action)} />;
           })}
           {rows.length === 0 && <p className="muted inbox-empty">{tab === "unread" ? "You’re all caught up." : tab === "archived" ? "Nothing archived." : "No notifications yet."}</p>}
         </div>
       </section>
       <section className="inbox-pane" aria-label="Notification">
-        {selected ? <SinceLastVisit events={seen[selected.key] ?? []} /> : null}
+        {selected ? <Changes events={selected.events} fresh={new Set([...unseenEvents(selected), ...(seen[selected.key] ?? [])].map((e) => e.id))} /> : null}
         {issue && isEpic(issue) ? (
           <div className="inbox-epic">
             <h2>{issue.summary}</h2>

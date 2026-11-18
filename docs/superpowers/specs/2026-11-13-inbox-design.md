@@ -7,7 +7,7 @@ Today the only way to know that tickets changed is Jira's email threads and Jira
 ## Goals
 
 - One inbox row per ticket. New changes to a ticket update its row and move it to the top; there are never two rows for the same ticket.
-- Each row says what changed since the owner last looked, not the whole history.
+- Each row says what changed since the ticket entered the inbox (or came back from the archive), not only since the owner last looked.
 - Clicking a row opens the current ticket in a pane on the right, editable exactly like the existing issue page, and marks the row read.
 - Rows can be marked read/unread, archived, and deleted.
 - The owner chooses which kinds of changes create notifications (see Rules).
@@ -38,11 +38,11 @@ An entry belongs to one ticket and has a state: unread, read or archived. It hol
 
 - A matching event on a ticket with no entry creates an unread entry.
 - A matching event on an unread entry adds to it and moves it up.
-- A matching event on a read entry makes it unread again; its summary lists only the events since it was read.
-- A matching event on an archived entry brings it back to the inbox as unread.
+- A matching event on a read entry makes it unread again; its summary and Changes block still list every event since the entry entered the inbox.
+- A matching event on an archived entry brings it back to the inbox as unread with a fresh list: the events from before the archive are dropped, only the new ones show. Unarchiving by hand keeps the list.
 - Opening a row, or opening that ticket from anywhere else in the app, marks its entry read. (Owner's call to confirm: opening elsewhere counts as having seen it.)
 - Archive removes the row from the inbox view; it stays under the Archived tab. Delete removes the entry and its events permanently. Both are available as keys and from a menu.
-- The row summary reads like "Status In Progress → In Review · 2 comments · Assignee → Ana". The pane shows a "since your last visit" block above the ticket with the same events, each with author and time.
+- The row summary reads like "Status In Progress → In Review · 2 comments · Assignee → Ana". The pane shows a "Changes" block above the ticket listing every event in the entry, each with author and time; the ones not seen yet carry a "New" flag.
 
 ### Views
 
@@ -59,6 +59,7 @@ Configured in the settings dialog and stored on the server, since the server eva
 | Status change | off / any status / only moves into the statuses I tick | any status |
 | Comments | off / only where I'm mentioned / every comment (within scope) | every comment (within scope) |
 | New tickets | off / assigned to me / in epics I pick / all | assigned to me |
+| Description edited by someone else | on / off | on |
 | Priority, due date, title, labels, type, parent, links | on / off each | off |
 
 "Involved" means the owner is assignee, reporter, QA assignee or watcher (follower) of the ticket, or has a comment or a mention of them in the local comment mirror for that ticket. The default scope is "Tickets I'm involved in".
@@ -81,9 +82,9 @@ The server's incremental sync already finds the issues that changed. For those, 
 
 The first time the feature runs, the server records the install time. Changelog entries and comments dated at or before it never produce events, so an existing install does not flood the inbox, and a full resync (for example after a schema bump) produces none either. New comments are found by comparing against the mirror before the comment rows are overwritten. Deleted or moved tickets do not notify; an existing entry whose ticket disappears is removed.
 
-Description edits are not scanned for mentions in this version; only comments are. The owner's own edits, wherever made, create no event and leave an existing entry's state as it is.
+Description edits create a "Description changed" event (no text diff); they are not scanned for mentions in this version, only comments are. The owner's own edits, wherever made, create no event and leave an existing entry's state as it is.
 
-An entry keeps its events until it is deleted, with a read-at mark separating old from new. Marking a read entry unread by hand shows the batch of events that made it unread last time.
+An entry keeps its events until it is deleted or comes back from the archive; reading only moves a read-at mark, which separates seen from unseen events and hides nothing. Marking a read entry unread by hand shows the batch of events that made it unread last time.
 
 Read, unread, archive and delete are sent to the server through a new inbox endpoint, and so are rule changes; they don't go through the ticket mutation path. Opening a ticket anywhere calls the same read endpoint. If a deleted entry's ticket changes again, a new entry is created.
 

@@ -3,7 +3,7 @@ import type { InboxEvent, InboxEventKind } from "../shared/inbox.ts";
 import type { UserRef } from "../shared/types.ts";
 import { FIELDS } from "./activity.ts";
 
-const KINDS: Record<string, InboxEventKind> = { ...(FIELDS as Record<string, InboxEventKind>), link: "links" };
+const KINDS: Record<string, InboxEventKind> = { ...(FIELDS as Record<string, InboxEventKind>), link: "links", description: "description" };
 const EXCERPT_CHARS = 160;
 
 const user = (u: any): UserRef | null => (u?.accountId ? { id: u.accountId, name: u.displayName ?? u.accountId } : null);

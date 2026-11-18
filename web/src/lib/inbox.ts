@@ -1,7 +1,7 @@
 import type { InboxEntry, InboxEvent, InboxEventKind } from "@shared/inbox";
 
 const MOVED: Partial<Record<InboxEventKind, string>> = { status: "Status", assignee: "Assignee", priority: "Priority", duedate: "Due date", type: "Type", parent: "Parent" };
-const CHANGED: Partial<Record<InboxEventKind, string>> = { summary: "Title changed", labels: "Labels changed", links: "Links changed" };
+const CHANGED: Partial<Record<InboxEventKind, string>> = { summary: "Title changed", description: "Description changed", labels: "Labels changed", links: "Links changed" };
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 

@@ -78,10 +78,25 @@ describe("Inbox view", () => {
     await user.click(rowOf("ABC-1"));
     await waitFor(() => expect(sent(["ABC-1"], "read")).toBe(true));
     expect(await screen.findByRole("region", { name: "Issue detail" })).toBeInTheDocument();
-    const block = screen.getByRole("region", { name: "Since your last visit" });
+    const block = screen.getByRole("region", { name: "Changes" });
     expect(within(block).getByText("Status In Development → In Review")).toBeInTheDocument();
     expect(within(block).getByText("Commented: “Please take a look”")).toBeInTheDocument();
     expect(keysShown()).toContain("ABC-1"); // the row stays under the cursor although it is read now
+  });
+
+  it("a read ticket keeps its whole list of changes and flags only the ones not seen yet", async () => {
+    server.inbox = [entry("ABC-3", "unread", [
+      event("o1", "ABC-3", { kind: "duedate", to: "2026-11-20", at: "2026-11-12T09:00:00.000Z", detectedAt: "2026-11-12T09:01:00.000Z" }),
+      event("o2", "ABC-3", { kind: "description", at: "2026-11-13T09:00:00.000Z", detectedAt: "2026-11-13T09:01:00.000Z" }),
+    ], { readAt: "2026-11-12T10:00:00.000Z" })];
+    const { user } = await renderApp();
+    await waitFor(() => expect(keysShown()).toEqual(["ABC-3"]));
+    expect(within(rowOf("ABC-3")).getByText("Due date → 2026-11-20 · Description changed")).toBeInTheDocument();
+    await user.click(rowOf("ABC-3"));
+    const block = await screen.findByRole("region", { name: "Changes" });
+    expect(within(block).getByText("Due date → 2026-11-20")).toBeInTheDocument();
+    expect(within(block).getByText("Description changed")).toBeInTheDocument();
+    expect(within(block).getAllByText("New")).toHaveLength(1);
   });
 
   it("E archives the row being looked at and moves on to the next one", async () => {
@@ -157,7 +172,7 @@ describe("Inbox view", () => {
     const { user } = await renderApp();
     await waitFor(() => expect(keysShown()).toEqual(["ABC-4"]));
     await user.click(rowOf("ABC-4"));
-    const block = await screen.findByRole("region", { name: "Since your last visit" });
+    const block = await screen.findByRole("region", { name: "Changes" });
     expect(within(block).getByText("Mentioned you: “@Ana please review the scope”")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open project" }));
     await waitFor(() => expect(window.location.pathname).toBe("/projects/ABC-4"));

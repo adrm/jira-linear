@@ -153,7 +153,9 @@ export function openStore(path: string): Store {
         db.prepare("INSERT INTO inbox_seen(id) VALUES(?)").run(e.id);
         if (!deliver(e)) continue;
         db.prepare("INSERT INTO inbox_event(id, key, at, data) VALUES(?, ?, ?, ?)").run(e.id, e.key, e.at, JSON.stringify({ ...e, detectedAt: now }));
-        const row = db.prepare("SELECT updated_at FROM inbox_entry WHERE key = ?").get(e.key) as { updated_at: string } | undefined;
+        const row = db.prepare("SELECT state, updated_at FROM inbox_entry WHERE key = ?").get(e.key) as { state: InboxState; updated_at: string } | undefined;
+        // An entry that comes back from the archive starts a new list of changes; the archived one is dropped.
+        if (row?.state === "archived") db.prepare("DELETE FROM inbox_event WHERE key = ? AND id != ?").run(e.key, e.id);
         if (!row) {
           db.prepare("INSERT INTO inbox_entry(key, state, updated_at, read_at, prev_read_at) VALUES(?, 'unread', ?, NULL, NULL)").run(e.key, e.at);
         } else {
@@ -255,9 +257,7 @@ export function openStore(path: string): Store {
         else byKey.set(r.key, [JSON.parse(r.data) as InboxEvent]);
       }
       return entries.map((r) => {
-        const mark = r.state === "unread" ? r.read_at : r.prev_read_at;
-        const events = (byKey.get(r.key) ?? []).filter((e) => !mark || Date.parse(e.detectedAt ?? e.at) > Date.parse(mark));
-        return { key: r.key, state: r.state, updatedAt: r.updated_at, readAt: r.read_at, events };
+        return { key: r.key, state: r.state, updatedAt: r.updated_at, readAt: r.read_at, events: byKey.get(r.key) ?? [] };
       });
     },
     markInboxSeen(ids) {
@@ -276,7 +276,10 @@ export function openStore(path: string): Store {
     },
     inboxRules() {
       const raw = getKv("inbox_rules");
-      return raw ? (JSON.parse(raw) as InboxRules) : structuredClone(DEFAULT_RULES);
+      if (!raw) return structuredClone(DEFAULT_RULES);
+      // Rules saved before a field row existed lack it; fill those in from the defaults.
+      const saved = JSON.parse(raw) as InboxRules;
+      return { ...saved, fields: { ...DEFAULT_RULES.fields, ...saved.fields } };
     },
     setInboxRules: (rules) => setKv("inbox_rules", JSON.stringify(rules)),
     inboxInstalledAt() {

@@ -53,6 +53,12 @@ Deno.test("a history with several items gives one event per item, and unmapped f
   assertEquals(events.map((e) => [e.id, e.kind]), [["h:10:0", "status"], ["h:10:2", "priority"], ["h:10:3", "links"]]);
 });
 
+Deno.test("a description edit by someone else gives a description event, the owner's own gives none", () => {
+  const edit = (id: string, who: typeof ANA) => history(id, "2026-11-13T10:00:00.000+0000", who, [{ field: "description", fromString: "old", toString: "new" }]);
+  const events = detectEvents(raw({ histories: [edit("20", ANA), edit("21", { accountId: ME, displayName: "Me" } as typeof ANA)] }), none, ME, INSTALLED);
+  assertEquals(events.map((e) => [e.id, e.kind]), [["h:20:0", "description"]]);
+});
+
 Deno.test("history dated at or before the install time gives no events, whatever offset it is written in", () => {
   const before = history("10", "2026-11-13T04:59:59.000-0400", ANA, [status("A", "B")]); // 08:59:59Z
   const at = history("11", "2026-11-13T05:00:00.000-0400", ANA, [status("B", "C")]); // 09:00:00Z
